@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cinzel", "Georgia", serif;
+  --font-decorative: "Cinzel Decorative", "Georgia", serif;
+  --font-body: "Manrope", "Segoe UI", sans-serif;
+
+  /* Preto + dourado — tema único da vitrine e do admin */
+  --color-noir-950: #0b0908;
+  --color-noir-900: #141110;
+  --color-noir-800: #1d1917;
+  --color-noir-700: #2b2521;
+  --color-noir-600: #443b34;
+
+  --color-cream-100: #f7f1e6;
+  --color-cream-300: #cfc3b0;
+
+  --color-wine-600: #8c3a4a;
+
+  /* Brand gold — tons extraídos da logo oficial */
+  --color-gold-900: #4b2e05;
+  --color-gold-700: #7a5200;
+  --color-gold-600: #b8860b;
+  --color-gold-500: #d4af37;
+  --color-gold-400: #f5d37a;
+  --color-gold-300: #f8e0a3;
+
+  --shadow-soft: 0 25px 70px -20px rgb(0 0 0 / 0.6);
+  --shadow-card: 0 14px 34px -14px rgb(0 0 0 / 0.55);
+  --shadow-gold: 0 8px 24px -8px rgb(212 175 55 / 0.35);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-noir-950);
+    color: var(--color-cream-100);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold-500);
+    outline-offset: 3px;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .bg-noise {
+    background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.05) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+
+  .animate-marquee-ltr {
+    animation: marquee-ltr 28s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-marquee-ltr {
+      animation: none;
+    }
+  }
+}
+
+@keyframes marquee-ltr {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}

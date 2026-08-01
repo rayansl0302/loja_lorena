@@ -1,0 +1,47 @@
+import type { Banner } from '@/types/banner'
+
+export const bannerSeed: Banner[] = [
+  {
+    id: 'banner-boas-vindas',
+    title: 'Seu estilo. Seu império.',
+    subtitle:
+      'Curadoria autoral de vestidos, blusas, calças, saias e conjuntos — pensada para mulheres que não abrem mão de estilo no dia a dia.',
+    ctaLabel: 'Falar no WhatsApp',
+    ctaType: 'whatsapp',
+    whatsappMessage: 'Quero ver as novidades',
+    category: '',
+    color: '#d4af37',
+    icon: 'CrownBold',
+    image: '',
+    active: true,
+    order: 0,
+  },
+  {
+    id: 'banner-desconto',
+    title: '10% OFF na primeira compra',
+    subtitle: 'Use o cupom PRIMEIRACOMPRA ao falar com a gente no WhatsApp e garanta seu desconto.',
+    ctaLabel: 'Quero meu desconto',
+    ctaType: 'whatsapp',
+    whatsappMessage: 'Olá! Vi o cupom PRIMEIRACOMPRA no site e quero aproveitar.',
+    category: '',
+    color: '#f5d37a',
+    icon: 'TicketBold',
+    image: '',
+    active: true,
+    order: 1,
+  },
+  {
+    id: 'banner-conjuntos',
+    title: 'Conjuntos exclusivos',
+    subtitle: 'Peças combinadas para um look completo, com acabamento premium do topo aos pés.',
+    ctaLabel: 'Ver conjuntos',
+    ctaType: 'catalogo',
+    whatsappMessage: '',
+    category: 'Conjuntos',
+    color: '#b8860b',
+    icon: 'GiftBold',
+    image: '',
+    active: true,
+    order: 2,
+  },
+]
