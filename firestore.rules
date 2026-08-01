@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Registro de uso de cupons de "uso único por CPF".
+    // O ID do documento é `${codigoDoCupom}_${sha256(cpfSomenteDigitos)}` — nenhum CPF em
+    // texto puro é armazenado, só o hash como parte do identificador.
+    match /couponUsages/{usageId} {
+      // Precisa ser possível checar "esse CPF já usou esse cupom?" antes de aplicar.
+      allow get: if true;
+
+      // Nunca permite listar/varrer todos os usos (evita enumerar hashes em massa).
+      allow list: if false;
+
+      // Só cria se esse cupom+CPF ainda não tiver sido registrado, e só com o formato
+      // exato esperado. Essa é a trava real: mesmo alguém chamando o SDK direto pelo
+      // DevTools não consegue reescrever ou "resetar" um uso já existente.
+      allow create: if !exists(/databases/$(database)/documents/couponUsages/$(usageId))
+                    && request.resource.data.keys().hasOnly(['couponCode', 'usedAt'])
+                    && request.resource.data.couponCode is string
+                    && request.resource.data.couponCode.size() > 0
+                    && request.resource.data.usedAt == request.time;
+
+      // Histórico imutável: ninguém edita ou apaga um uso já registrado.
+      allow update, delete: if false;
+    }
+
+    // Perfil de cliente (nome + celular) para autopreenchimento pelo CPF.
+    // Diferente de couponUsages, aqui o CPF fica legível como ID do documento — é o que
+    // permite o lookup. Sem login de cliente não dá pra restringir "só o dono edita o
+    // próprio registro"; a validação abaixo só garante o formato dos dados, não a
+    // identidade de quem escreve.
+    match /customers/{cpf} {
+      // Precisa ser possível buscar pelo CPF pra autopreencher nome/celular.
+      allow get: if true;
+
+      // Nunca permite listar/varrer todos os clientes cadastrados.
+      allow list: if false;
+
+      // Cria ou atualiza (upsert) — só valida formato dos campos.
+      allow create, update: if cpf.matches('^[0-9]{11}$')
+                            && request.resource.data.keys().hasOnly(['name', 'phone', 'updatedAt'])
+                            && request.resource.data.name is string
+                            && request.resource.data.name.size() > 0
+                            && request.resource.data.phone is string
+                            && request.resource.data.phone.size() > 0
+                            && request.resource.data.updatedAt == request.time;
+
+      // Cliente não apaga o próprio registro pelo app (a lojista pode, direto no console).
+      allow delete: if false;
+    }
+
+    // Bloqueia qualquer outra coleção por padrão.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -6,6 +6,8 @@ import { formatBRL, messages, whatsappLink } from '@/config/brand'
 import { getProductIcon } from '@/config/productIcons'
 import { toSafeImageSrc } from '@/utils/url'
 import { formatCouponDiscountLabel } from '@/utils/coupon'
+import { formatCpf, isValidCpf, normalizeCpf } from '@/utils/cpf'
+import { formatPhone, isValidPhone } from '@/utils/phone'
 
 export function CartDrawer() {
   const {
@@ -20,20 +22,36 @@ export function CartDrawer() {
     appliedCoupon,
     applyCoupon,
     clearCoupon,
+    finalizeCouponUsage,
+    customerName,
+    customerCpf,
+    customerPhone,
+    setCustomerName,
+    setCustomerCpf,
+    setCustomerPhone,
+    autofillFromCpf,
+    saveCustomerProfile,
     showToast,
   } = useShop()
 
   const [couponInput, setCouponInput] = useState('')
   const [couponError, setCouponError] = useState('')
+  const [isSubmittingCoupon, setIsSubmittingCoupon] = useState(false)
+  const [customerErrors, setCustomerErrors] = useState<string[]>([])
+  const [isCheckingOut, setIsCheckingOut] = useState(false)
 
-  function handleApplyCoupon(event: FormEvent) {
+  async function handleApplyCoupon(event: FormEvent) {
     event.preventDefault()
     setCouponError('')
-    const result = applyCoupon(couponInput)
+    setIsSubmittingCoupon(true)
+    const result = await applyCoupon(couponInput)
+    setIsSubmittingCoupon(false)
+
     if (!result.ok) {
       setCouponError(result.reason)
       return
     }
+
     setCouponInput('')
   }
 
@@ -42,15 +60,39 @@ export function CartDrawer() {
     setCouponError('')
   }
 
-  function handleCheckout() {
+  function handleCpfBlur() {
+    const digits = normalizeCpf(customerCpf)
+    if (isValidCpf(digits)) {
+      void autofillFromCpf(digits)
+    }
+  }
+
+  async function handleCheckout() {
     if (cart.length === 0) {
       showToast(messages.emptyCart, 'error')
       return
     }
+
+    const errors: string[] = []
+    if (!customerName.trim()) errors.push('Informe seu nome completo.')
+    if (!isValidCpf(customerCpf)) errors.push('Informe um CPF válido.')
+    if (!isValidPhone(customerPhone)) errors.push('Informe um celular válido, com DDD.')
+
+    if (errors.length > 0) {
+      setCustomerErrors(errors)
+      return
+    }
+    setCustomerErrors([])
+
+    setIsCheckingOut(true)
+    await Promise.all([saveCustomerProfile(), finalizeCouponUsage()])
+    setIsCheckingOut(false)
+
     const message = messages.cartOrder(cart, cartTotal, {
       subtotal: cartSubtotal,
       discount: cartDiscount,
       coupon: appliedCoupon,
+      customer: { name: customerName.trim(), cpf: customerCpf, phone: customerPhone },
     })
     window.open(whatsappLink(message), '_blank', 'noopener,noreferrer')
   }
@@ -176,6 +218,59 @@ export function CartDrawer() {
             <footer className="border-t border-noir-700 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
               {cart.length > 0 && (
                 <div className="mb-4 flex flex-col gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-cream-300/70">
+                    Seus dados
+                  </p>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => {
+                      setCustomerName(e.target.value)
+                      setCustomerErrors([])
+                    }}
+                    placeholder="Nome completo"
+                    aria-label="Nome completo"
+                    className="rounded-xl border border-noir-700 bg-noir-800 px-3 py-2 text-sm text-cream-100 outline-none transition placeholder:text-cream-300/50 focus:border-gold-500"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatCpf(customerCpf)}
+                    onChange={(e) => {
+                      setCustomerCpf(e.target.value)
+                      setCustomerErrors([])
+                    }}
+                    onBlur={handleCpfBlur}
+                    placeholder="CPF"
+                    aria-label="CPF"
+                    maxLength={14}
+                    className="rounded-xl border border-noir-700 bg-noir-800 px-3 py-2 text-sm text-cream-100 outline-none transition placeholder:text-cream-300/50 focus:border-gold-500"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatPhone(customerPhone)}
+                    onChange={(e) => {
+                      setCustomerPhone(e.target.value)
+                      setCustomerErrors([])
+                    }}
+                    placeholder="Celular com DDD"
+                    aria-label="Celular"
+                    maxLength={16}
+                    className="rounded-xl border border-noir-700 bg-noir-800 px-3 py-2 text-sm text-cream-100 outline-none transition placeholder:text-cream-300/50 focus:border-gold-500"
+                  />
+                  {customerErrors.length > 0 && (
+                    <ul className="flex flex-col gap-0.5 text-xs text-wine-600" role="alert">
+                      {customerErrors.map((error) => (
+                        <li key={error}>{error}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {cart.length > 0 && (
+                <div className="mb-4 flex flex-col gap-2">
                   {appliedCoupon ? (
                     <div className="flex items-center justify-between gap-2 rounded-xl border border-gold-500/40 bg-gold-500/10 px-3 py-2">
                       <div className="min-w-0">
@@ -211,9 +306,10 @@ export function CartDrawer() {
                       />
                       <button
                         type="submit"
-                        className="shrink-0 rounded-full border border-gold-500 px-4 py-2 text-sm font-medium text-gold-400 transition hover:bg-gold-500/10"
+                        disabled={isSubmittingCoupon}
+                        className="shrink-0 rounded-full border border-gold-500 px-4 py-2 text-sm font-medium text-gold-400 transition hover:bg-gold-500/10 disabled:opacity-50"
                       >
-                        Aplicar
+                        {isSubmittingCoupon ? 'Verificando...' : 'Aplicar'}
                       </button>
                     </form>
                   )}
@@ -246,10 +342,11 @@ export function CartDrawer() {
               <motion.button
                 type="button"
                 onClick={handleCheckout}
+                disabled={isCheckingOut}
                 whileTap={{ scale: 0.97 }}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-gold-500 py-3.5 font-medium text-noir-950 shadow-card transition hover:bg-gold-400"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-gold-500 py-3.5 font-medium text-noir-950 shadow-card transition hover:bg-gold-400 disabled:opacity-60"
               >
-                Fechar pedido no WhatsApp
+                {isCheckingOut ? 'Enviando...' : 'Fechar pedido no WhatsApp'}
               </motion.button>
             </footer>
           </motion.aside>

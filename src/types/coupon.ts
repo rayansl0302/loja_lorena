@@ -13,6 +13,7 @@ export interface Coupon {
   productIds: string[]
   category: Category | ''
   firstPurchaseOnly: boolean
+  requireCpf: boolean
   active: boolean
   expiresAt: string | null
 }

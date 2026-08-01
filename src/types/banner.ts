@@ -13,6 +13,7 @@ export interface Banner {
   color: string
   icon: string
   image: string
+  couponCode: string
   active: boolean
   order: number
 }

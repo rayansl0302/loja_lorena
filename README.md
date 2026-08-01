@@ -2,7 +2,8 @@
 
 Loja-vitrine de moda feminina (by Lorenna Evylin) com conversão via WhatsApp. Visual premium em
 preto e dourado, catálogo completo com filtros, e painel da lojista para gerenciar os produtos.
-Sem backend — dados mockados e persistência em `localStorage`.
+Praticamente sem backend — dados mockados e persistência em `localStorage`, com uma única exceção:
+cupons de uso único por CPF usam o Firebase Firestore para validar (ver seção própria abaixo).
 
 ## Como rodar
 
@@ -104,10 +105,12 @@ estado a qualquer momento.
 src/
   components/   componentes de UI (Hero, ProductCard, CartDrawer, CatalogFilters, Footer...)
   config/       configuração central da marca, helpers (WhatsApp, BRL) e ícones de produto
-  data/         catálogo seed
+  data/         catálogo, banners e cupons seed
+  lib/          integração com Firebase/Firestore (perfil do cliente, uso único de cupom por CPF)
   pages/        Home, CatalogPage, Login, Admin, páginas legais
-  store/        ShopContext (produtos, carrinho, toast, drawer) e AuthContext (sessão mock)
-  types/        tipos de Produto, filtros e item de carrinho
+  store/        ShopContext (produtos, carrinho, cupons, banners, cliente, toast, drawer) e AuthContext
+  types/        tipos de Produto, Banner, Cupom, filtros e item de carrinho
+  utils/        helpers puros (cupom, CPF, celular, URL de imagem)
 ```
 
 ## Funcionamento
@@ -126,6 +129,44 @@ src/
 - **Carrinho**: monta uma mensagem com itens, tamanhos, quantidades e total, e abre o WhatsApp
   (`wa.me`) para fechar o pedido.
 - **Produto individual**: botão "Comprar" abre o WhatsApp com uma mensagem de interesse na peça.
+
+## Cliente (nome/CPF/celular) e cupom de uso único por CPF (Firebase)
+
+Todo fechamento de pedido pede nome completo, CPF e celular do cliente — esses dados ficam
+guardados no Firestore, associados pelo CPF, só para autopreencher os campos numa compra futura
+(em qualquer aparelho, não só no navegador de origem). Digitar o CPF já cadastrado preenche
+nome/celular sozinho.
+
+Cupons marcados como "Exigir CPF" no admin (ex.: `PRIMEIRACOMPRA` no seed) usam esse mesmo CPF
+pra garantir uso único por pessoa — mas esse controle específico guarda só um hash SHA-256 do
+CPF, nunca o CPF em si (coleção `couponUsages`, separada da coleção `customers` acima). Não dá
+pra burlar limpando o `localStorage` ou usando aba anônima; a validação é feita de verdade fora
+do navegador.
+
+**Trade-off de privacidade que vale saber**: como o site não tem login de cliente, não há como
+restringir tecnicamente "só o dono do CPF pode consultar/editar seu próprio registro" na coleção
+`customers` — as regras do Firestore validam só o formato dos dados, não a identidade de quem
+escreve. Documentado com mais detalhe nos comentários de [`firestore.rules`](firestore.rules).
+
+### Passo a passo para configurar
+
+1. Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com).
+2. No menu lateral, ative o **Firestore Database** → "Criar banco de dados" → modo **produção**.
+3. Em "Configurações do projeto" (ícone de engrenagem) → aba "Geral" → "Seus apps" → adicione um
+   **app da Web** (`</>`). Copie os valores do objeto `firebaseConfig` gerado.
+4. Preencha essas chaves no seu `.env` local (copie de [`.env.example`](.env.example)):
+   `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`,
+   `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`.
+5. Repita essas mesmas variáveis nas configurações do projeto na **Vercel** (Settings →
+   Environment Variables), para os ambientes Production e Preview — sem isso, o site publicado
+   não guarda nem autopreenche nada, e cupons com "Exigir CPF" ficam indisponíveis.
+6. No console do Firebase, vá em Firestore Database → aba "Regras" e cole o conteúdo de
+   [`firestore.rules`](firestore.rules) (substitua as regras padrão), depois publique. Essa é a
+   trava de verdade — sem ela, qualquer app conectado à sua config do Firebase poderia escrever
+   dados livremente nas coleções `customers` e `couponUsages`.
+
+Sem essas variáveis configuradas, o restante do site funciona normalmente; só o autopreenchimento
+e a validação de cupons com "Exigir CPF" ficam indisponíveis, sem quebrar o checkout.
 
 ## Limitações intencionais (fase inicial)
 

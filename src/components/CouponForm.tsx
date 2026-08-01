@@ -14,6 +14,7 @@ type FormState = {
   productIds: string[]
   category: Category | ''
   firstPurchaseOnly: boolean
+  requireCpf: boolean
   active: boolean
   expiresAt: string
 }
@@ -27,6 +28,7 @@ const EMPTY_FORM: FormState = {
   productIds: [],
   category: '',
   firstPurchaseOnly: false,
+  requireCpf: false,
   active: true,
   expiresAt: '',
 }
@@ -42,6 +44,7 @@ function toFormState(coupon?: Coupon): FormState {
     productIds: coupon.productIds,
     category: coupon.category,
     firstPurchaseOnly: coupon.firstPurchaseOnly,
+    requireCpf: coupon.requireCpf,
     active: coupon.active !== false,
     expiresAt: coupon.expiresAt ?? '',
   }
@@ -119,6 +122,7 @@ export function CouponForm({
       productIds: form.scope === 'products' ? form.productIds : [],
       category: form.scope === 'category' ? form.category : '',
       firstPurchaseOnly: form.firstPurchaseOnly,
+      requireCpf: form.requireCpf,
       active: form.active,
       expiresAt: form.expiresAt.trim() || null,
     })
@@ -258,6 +262,21 @@ export function CouponForm({
           />
           Somente primeira compra
         </label>
+        <label className="flex items-center gap-2 text-sm text-cream-100">
+          <input
+            type="checkbox"
+            checked={form.requireCpf}
+            onChange={(e) => setForm((prev) => ({ ...prev, requireCpf: e.target.checked }))}
+            className="h-4 w-4 accent-gold-500"
+          />
+          Exigir CPF (uso único por pessoa)
+        </label>
+        {form.requireCpf && (
+          <p className="pl-6 text-xs text-cream-300/70">
+            Ao aplicar esse cupom, o cliente precisa informar o CPF, que é validado contra os
+            usos anteriores desse cupom (verificação online — exige o Firebase configurado).
+          </p>
+        )}
         <label className="flex items-center gap-2 text-sm text-cream-100">
           <input
             type="checkbox"

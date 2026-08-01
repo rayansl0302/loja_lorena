@@ -9,14 +9,33 @@ export function PoliticaPrivacidade() {
     >
       <LegalSection heading="Quais dados coletamos">
         <p>
-          Este site não possui cadastro de conta nem checkout com pagamento integrado. As
-          informações pessoais que você compartilha (nome, telefone, endereço, preferências de
-          tamanho) são trocadas diretamente na nossa conversa no WhatsApp, fora deste site.
+          Este site não possui cadastro de conta nem checkout com pagamento integrado. Ao fechar
+          um pedido, pedimos seu nome completo, CPF e celular — esses três dados ficam guardados
+          de forma associada entre si, para que você não precise redigitá-los numa próxima compra
+          (em qualquer aparelho, não só no navegador onde digitou da primeira vez). Endereço de
+          entrega e forma de pagamento continuam sendo combinados diretamente na conversa do
+          WhatsApp, fora deste site.
         </p>
         <p>
-          Localmente, o navegador guarda apenas os itens da sua sacola e preferências de navegação,
-          para facilitar sua próxima visita — esses dados ficam só no seu dispositivo (localStorage)
-          e não são enviados a nenhum servidor.
+          Localmente, o navegador também guarda os itens da sua sacola e o que você digitou nesses
+          campos, para preencher mais rápido da próxima vez — esses dados ficam no seu dispositivo
+          (localStorage) e não substituem o registro guardado para o autopreenchimento entre
+          aparelhos.
+        </p>
+      </LegalSection>
+      <LegalSection heading="Nome, CPF e celular para agilizar seu pedido">
+        <p>
+          Nome, CPF e celular são armazenados de forma legível (não anonimizada), associados
+          entre si pelo seu CPF, com uma única finalidade: preencher esses campos automaticamente
+          quando você comprar novamente, em qualquer dispositivo. Não usamos esses dados para
+          marketing, não os compartilhamos com terceiros, e eles não ficam visíveis para outros
+          clientes da loja.
+        </p>
+        <p>
+          Alguns cupons promocionais (por exemplo, de primeira compra) usam seu CPF para garantir
+          que cada pessoa use o benefício apenas uma vez. Nesse controle específico, guardamos
+          apenas um código criptográfico irreversível (hash) do CPF — não o CPF em si — então não
+          é possível reconstruir o número a partir desse registro de uso de cupom.
         </p>
       </LegalSection>
       <LegalSection heading="Como usamos suas informações">
@@ -34,8 +53,9 @@ export function PoliticaPrivacidade() {
       </LegalSection>
       <LegalSection heading="Seus direitos">
         <p>
-          Você pode solicitar a qualquer momento a exclusão do seu histórico de conversa e dados
-          associados ao seu pedido, entrando em contato pelo WhatsApp ou Instagram (
+          Você pode solicitar a qualquer momento a exclusão do seu histórico de conversa e dos
+          dados associados ao seu pedido — incluindo o registro de nome, CPF e celular guardado
+          para autopreenchimento —, entrando em contato pelo WhatsApp ou Instagram (
           {brand.instagram}).
         </p>
       </LegalSection>

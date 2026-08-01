@@ -19,12 +19,23 @@ import {
   normalizeCouponCode,
   validateCouponForCart,
 } from '@/utils/coupon'
+import { isValidCpf, normalizeCpf } from '@/utils/cpf'
+import { isValidPhone, normalizePhone } from '@/utils/phone'
+import { hasUsedCoupon, registerCouponUsage } from '@/lib/couponUsage'
+import {
+  lookupCustomerProfile,
+  saveCustomerProfile as persistCustomerProfile,
+} from '@/lib/customerProfile'
 
 const PRODUCTS_KEY = 'lorena:products'
 const CART_KEY = 'lorena:cart'
 const BANNERS_KEY = 'lorena:banners'
 const COUPONS_KEY = 'lorena:coupons'
 const CART_COUPON_KEY = 'lorena:cart-coupon'
+const CART_COUPON_CPF_KEY = 'lorena:cart-coupon-cpf'
+const CUSTOMER_NAME_KEY = 'lorena:customer-name'
+const CUSTOMER_CPF_KEY = 'lorena:customer-cpf'
+const CUSTOMER_PHONE_KEY = 'lorena:customer-phone'
 
 export type ToastType = 'success' | 'error' | 'info'
 
@@ -33,6 +44,10 @@ export interface ToastState {
   message: string
   type: ToastType
 }
+
+export type ApplyCouponResult =
+  | { ok: true }
+  | { ok: false; reason: string; requiresCpf?: boolean }
 
 interface ShopContextValue {
   products: Product[]
@@ -69,8 +84,19 @@ interface ShopContextValue {
   cartTotal: number
   cartCount: number
   appliedCoupon: Coupon | null
-  applyCoupon: (code: string) => { ok: true } | { ok: false; reason: string }
+  appliedCouponCpf: string
+  applyCoupon: (code: string) => Promise<ApplyCouponResult>
   clearCoupon: () => void
+  finalizeCouponUsage: () => Promise<void>
+
+  customerName: string
+  customerCpf: string
+  customerPhone: string
+  setCustomerName: (value: string) => void
+  setCustomerCpf: (value: string) => void
+  setCustomerPhone: (value: string) => void
+  autofillFromCpf: (cpfDigits: string) => Promise<void>
+  saveCustomerProfile: () => Promise<void>
 
   isDrawerOpen: boolean
   openDrawer: () => void
@@ -122,6 +148,16 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [appliedCouponCode, setAppliedCouponCode] = useState<string>(() =>
     readStorage(CART_COUPON_KEY, ''),
   )
+  const [appliedCouponCpf, setAppliedCouponCpf] = useState<string>(() =>
+    readStorage(CART_COUPON_CPF_KEY, ''),
+  )
+  const [customerName, setCustomerName] = useState<string>(() =>
+    readStorage(CUSTOMER_NAME_KEY, ''),
+  )
+  const [customerCpf, setCustomerCpf] = useState<string>(() => readStorage(CUSTOMER_CPF_KEY, ''))
+  const [customerPhone, setCustomerPhone] = useState<string>(() =>
+    readStorage(CUSTOMER_PHONE_KEY, ''),
+  )
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
 
@@ -144,6 +180,22 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeStorage(CART_COUPON_KEY, appliedCouponCode)
   }, [appliedCouponCode])
+
+  useEffect(() => {
+    writeStorage(CART_COUPON_CPF_KEY, appliedCouponCpf)
+  }, [appliedCouponCpf])
+
+  useEffect(() => {
+    writeStorage(CUSTOMER_NAME_KEY, customerName)
+  }, [customerName])
+
+  useEffect(() => {
+    writeStorage(CUSTOMER_CPF_KEY, customerCpf)
+  }, [customerCpf])
+
+  useEffect(() => {
+    writeStorage(CUSTOMER_PHONE_KEY, customerPhone)
+  }, [customerPhone])
 
   useEffect(() => {
     if (!toast) return
@@ -308,6 +360,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       setCoupons((prev) => prev.filter((c) => c.id !== id))
       if (removed && appliedCouponCode === removed.code) {
         setAppliedCouponCode('')
+        setAppliedCouponCpf('')
       }
       showToast('Cupom removido', 'info')
     },
@@ -323,6 +376,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       const willBeActive = coupon ? coupon.active === false : true
       if (coupon && !willBeActive && appliedCouponCode === coupon.code) {
         setAppliedCouponCode('')
+        setAppliedCouponCpf('')
       }
       showToast(willBeActive ? 'Cupom ativado' : 'Cupom desativado', 'info')
     },
@@ -332,6 +386,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const restoreCouponSeed = useCallback(() => {
     setCoupons(couponSeed)
     setAppliedCouponCode('')
+    setAppliedCouponCpf('')
     showToast('Cupons restaurados para o padrão', 'info')
   }, [showToast])
 
@@ -383,6 +438,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const clearCart = useCallback(() => {
     setCart([])
     setAppliedCouponCode('')
+    setAppliedCouponCpf('')
   }, [])
 
   const cartSubtotal = useMemo(
@@ -414,28 +470,84 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     if (!appliedCouponCode) return
     const coupon = coupons.find((c) => c.code === appliedCouponCode)
     const error = validateCouponForCart(coupon, cart, products)
-    if (error) setAppliedCouponCode('')
+    if (error) {
+      setAppliedCouponCode('')
+      setAppliedCouponCpf('')
+    }
   }, [appliedCouponCode, cart, coupons, products])
 
   const applyCoupon = useCallback(
-    (code: string) => {
+    async (code: string): Promise<ApplyCouponResult> => {
       const normalized = normalizeCouponCode(code)
       const coupon = coupons.find((c) => c.code === normalized)
       const error = validateCouponForCart(coupon, cart, products)
       if (error) {
-        return { ok: false as const, reason: couponErrorMessage(error) }
+        return { ok: false, reason: couponErrorMessage(error) }
       }
+
+      if (coupon!.requireCpf) {
+        const cpfDigits = normalizeCpf(customerCpf)
+        if (!isValidCpf(cpfDigits)) {
+          return {
+            ok: false,
+            reason: 'Preencha um CPF válido em "Seus dados" para usar este cupom.',
+            requiresCpf: true,
+          }
+        }
+        try {
+          const used = await hasUsedCoupon(normalized, cpfDigits)
+          if (used) {
+            return {
+              ok: false,
+              reason: 'Este cupom já foi usado com este CPF.',
+              requiresCpf: true,
+            }
+          }
+        } catch {
+          return {
+            ok: false,
+            reason: 'Não foi possível validar o cupom agora. Tente novamente em instantes.',
+            requiresCpf: true,
+          }
+        }
+        setAppliedCouponCpf(cpfDigits)
+      } else {
+        setAppliedCouponCpf('')
+      }
+
       setAppliedCouponCode(normalized)
       showToast(`Cupom ${normalized} aplicado`)
-      return { ok: true as const }
+      return { ok: true }
     },
-    [cart, coupons, products, showToast],
+    [cart, coupons, customerCpf, products, showToast],
   )
 
   const clearCoupon = useCallback(() => {
     setAppliedCouponCode('')
+    setAppliedCouponCpf('')
     showToast('Cupom removido', 'info')
   }, [showToast])
+
+  const finalizeCouponUsage = useCallback(async () => {
+    if (!appliedCoupon?.requireCpf || !appliedCouponCpf) return
+    await registerCouponUsage(appliedCoupon.code, appliedCouponCpf)
+  }, [appliedCoupon, appliedCouponCpf])
+
+  const autofillFromCpf = useCallback(async (cpfDigits: string) => {
+    const profile = await lookupCustomerProfile(cpfDigits)
+    if (!profile) return
+    setCustomerName((prev) => (prev.trim() ? prev : profile.name))
+    setCustomerPhone((prev) => (prev.trim() ? prev : profile.phone))
+  }, [])
+
+  const saveCustomerProfile = useCallback(async () => {
+    const cpfDigits = normalizeCpf(customerCpf)
+    if (!customerName.trim() || !isValidCpf(cpfDigits) || !isValidPhone(customerPhone)) return
+    await persistCustomerProfile(cpfDigits, {
+      name: customerName.trim(),
+      phone: normalizePhone(customerPhone),
+    })
+  }, [customerName, customerCpf, customerPhone])
 
   const openDrawer = useCallback(() => setIsDrawerOpen(true), [])
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), [])
@@ -473,8 +585,18 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     cartTotal,
     cartCount,
     appliedCoupon,
+    appliedCouponCpf,
     applyCoupon,
     clearCoupon,
+    finalizeCouponUsage,
+    customerName,
+    customerCpf,
+    customerPhone,
+    setCustomerName,
+    setCustomerCpf,
+    setCustomerPhone,
+    autofillFromCpf,
+    saveCustomerProfile,
     isDrawerOpen,
     openDrawer,
     closeDrawer,

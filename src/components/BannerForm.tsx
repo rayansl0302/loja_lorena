@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import type { Banner, BannerCtaType } from '@/types/banner'
 import type { Category } from '@/types/product'
+import type { Coupon } from '@/types/coupon'
 import { categories } from '@/config/brand'
 import { BANNER_ICON_OPTIONS, getBannerIcon } from '@/config/bannerIcons'
+import { isCouponExpired } from '@/utils/coupon'
 import { isSafeHttpUrl, toSafeImageSrc } from '@/utils/url'
 
 type FormState = {
@@ -16,6 +18,7 @@ type FormState = {
   color: string
   icon: string
   image: string
+  couponCode: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -28,6 +31,7 @@ const EMPTY_FORM: FormState = {
   color: '#d4af37',
   icon: 'GiftBold',
   image: '',
+  couponCode: '',
 }
 
 function toFormState(banner?: Banner): FormState {
@@ -42,16 +46,18 @@ function toFormState(banner?: Banner): FormState {
     color: banner.color,
     icon: banner.icon,
     image: banner.image ?? '',
+    couponCode: banner.couponCode ?? '',
   }
 }
 
 interface BannerFormProps {
   editingBanner: Banner | null
+  allCoupons: Coupon[]
   onSubmit: (data: Omit<Banner, 'id' | 'order'>) => void
   onCancel: () => void
 }
 
-export function BannerForm({ editingBanner, onSubmit, onCancel }: BannerFormProps) {
+export function BannerForm({ editingBanner, allCoupons, onSubmit, onCancel }: BannerFormProps) {
   const [form, setForm] = useState<FormState>(() => toFormState(editingBanner ?? undefined))
   const [errors, setErrors] = useState<string[]>([])
   const IconPreview = getBannerIcon(form.icon)
@@ -89,9 +95,12 @@ export function BannerForm({ editingBanner, onSubmit, onCancel }: BannerFormProp
       color: form.color,
       icon: form.icon,
       image: form.image.trim(),
+      couponCode: form.couponCode,
       active: editingBanner?.active ?? true,
     })
   }
+
+  const couponOptions = allCoupons.filter((c) => c.active !== false && !isCouponExpired(c))
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -225,6 +234,26 @@ export function BannerForm({ editingBanner, onSubmit, onCancel }: BannerFormProp
         <span className="text-xs text-cream-300/60">
           Dimensão recomendada: 1920×800px (proporção ~21:9), JPG/PNG/WebP até 2MB. Cole a URL
           pública do Cloudflare CDN/R2. Deixe em branco para usar o ícone ilustrado.
+        </span>
+      </label>
+
+      <label className="flex flex-col gap-1.5 text-sm text-cream-100">
+        Cupom exibido no banner (opcional)
+        <select
+          value={form.couponCode}
+          onChange={(e) => setForm((prev) => ({ ...prev, couponCode: e.target.value }))}
+          className="rounded-xl border border-noir-700 bg-noir-800 px-3.5 py-2.5 text-cream-100 outline-none transition focus:border-gold-500"
+        >
+          <option value="">Nenhum</option>
+          {couponOptions.map((coupon) => (
+            <option key={coupon.id} value={coupon.code}>
+              {coupon.code} — {coupon.label}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-cream-300/60">
+          Mostra um selo com o cupom logo abaixo do botão deste banner. Só aparecem cupons ativos
+          e dentro da validade — cadastre em "Cupons" antes de vinculá-lo aqui.
         </span>
       </label>
 

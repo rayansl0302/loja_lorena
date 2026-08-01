@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion, useScroll, useTransform } from 'framer-motion'
-import { brand, whatsappLink } from '@/config/brand'
+import { AltArrowLeftLinear, AltArrowRightLinear, Bag2Bold, TagPriceBold } from 'solar-icon-set'
+import { whatsappLink } from '@/config/brand'
 import { useShop } from '@/store/ShopContext'
 import { BannerIllustration } from '@/components/BannerIllustration'
 import type { Banner } from '@/types/banner'
+import type { Coupon } from '@/types/coupon'
+import { isCouponExpired } from '@/utils/coupon'
 import { toSafeImageSrc } from '@/utils/url'
 
 const AUTOPLAY_INTERVAL = 6500
@@ -37,6 +40,7 @@ const FALLBACK_BANNER: Banner = {
   color: '#d4af37',
   icon: 'CrownBold',
   image: '',
+  couponCode: '',
   active: true,
   order: 0,
 }
@@ -48,8 +52,17 @@ function resolveCtaHref(banner: Banner): string {
   return banner.category ? `/catalogo?categoria=${encodeURIComponent(banner.category)}` : '/catalogo'
 }
 
+function couponHeadline(coupon: Coupon): string {
+  if (coupon.discountType === 'percent') return `${coupon.value}% OFF`
+  return `R$ ${coupon.value.toFixed(2).replace('.', ',')} OFF`
+}
+
+function couponContext(coupon: Coupon): string {
+  return coupon.firstPurchaseOnly ? 'na primeira compra' : coupon.label || 'no seu pedido'
+}
+
 export function Hero() {
-  const { activeBanners } = useShop()
+  const { activeBanners, coupons } = useShop()
   const slides = activeBanners.length > 0 ? activeBanners : [FALLBACK_BANNER]
   const [index, setIndex] = useState(0)
   const sectionRef = useRef<HTMLElement>(null)
@@ -75,10 +88,20 @@ export function Hero() {
     return () => clearInterval(timer)
   }, [slides.length])
 
+  const goToPrev = () => setIndex((prev) => (prev - 1 + slides.length) % slides.length)
+  const goToNext = () => setIndex((prev) => (prev + 1) % slides.length)
+
   const banner = slides[index]
   const ctaHref = resolveCtaHref(banner)
   const isWhatsapp = banner.ctaType === 'whatsapp'
   const bannerImage = toSafeImageSrc(banner.image)
+
+  const bannerCoupon = useMemo(() => {
+    if (!banner.couponCode) return null
+    const coupon = coupons.find((c) => c.code === banner.couponCode)
+    if (!coupon || coupon.active === false || isCouponExpired(coupon)) return null
+    return coupon
+  }, [banner.couponCode, coupons])
 
   return (
     <section
@@ -109,20 +132,33 @@ export function Hero() {
       ) : null}
       <div className="absolute inset-0 bg-noise opacity-30" />
 
+      {slides.length > 1 && (
+        <button
+          type="button"
+          onClick={goToPrev}
+          aria-label="Banner anterior"
+          className="absolute left-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-cream-100/20 bg-noir-900/50 text-cream-100 backdrop-blur-sm transition hover:border-gold-500 hover:text-gold-400 sm:left-6 sm:flex"
+        >
+          <AltArrowLeftLinear size={20} />
+        </button>
+      )}
+      {slides.length > 1 && (
+        <button
+          type="button"
+          onClick={goToNext}
+          aria-label="Próximo banner"
+          className="absolute right-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-cream-100/20 bg-noir-900/50 text-cream-100 backdrop-blur-sm transition hover:border-gold-500 hover:text-gold-400 sm:right-6 sm:flex"
+        >
+          <AltArrowRightLinear size={20} />
+        </button>
+      )}
+
       <motion.div style={{ y: blobY }} className="absolute inset-0" aria-hidden>
         <div className="absolute -left-24 top-16 h-96 w-96 rounded-full bg-gold-500/15 blur-3xl" />
         <div className="absolute right-[-10%] top-1/3 h-[28rem] w-[28rem] rounded-full bg-gold-700/10 blur-3xl" />
         <div className="absolute bottom-[-15%] left-1/4 h-[26rem] w-[26rem] rounded-full bg-noir-600/30 blur-3xl" />
       </motion.div>
 
-      <div
-        className="pointer-events-none absolute inset-0 flex items-center justify-center select-none"
-        aria-hidden
-      >
-        <span className="font-decorative text-[28vw] leading-none text-cream-100/[0.04] sm:text-[22vw]">
-          {brand.name}
-        </span>
-      </div>
 
       <motion.div
         style={{ y: contentY, opacity: contentOpacity }}
@@ -140,13 +176,6 @@ export function Hero() {
               exit={{ opacity: 0, transition: { duration: 0.25 } }}
               className="flex flex-col items-start gap-5 sm:gap-6"
             >
-              <motion.span
-                variants={item}
-                className="rounded-full border border-gold-500/40 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-gold-400 sm:px-4 sm:text-xs"
-              >
-                {brand.name} — {brand.founder}
-              </motion.span>
-
               <motion.h1
                 variants={item}
                 className="text-balance font-display text-3xl leading-[1.08] text-cream-100 sm:text-5xl lg:text-6xl"
@@ -169,44 +198,75 @@ export function Hero() {
                     href={ctaHref}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="rounded-full bg-gold-500 px-5 py-3 text-sm font-semibold text-noir-950 shadow-gold transition hover:bg-gold-400 sm:px-7 sm:py-3.5"
+                    className="flex items-center gap-2 rounded-full bg-gold-500 px-5 py-3 text-sm font-semibold text-noir-950 shadow-gold transition hover:bg-gold-400 sm:px-7 sm:py-3.5"
                   >
+                    <Bag2Bold size={18} />
                     {banner.ctaLabel}
                   </motion.a>
                 ) : (
                   <Link
                     to={ctaHref}
-                    className="rounded-full bg-gold-500 px-5 py-3 text-sm font-semibold text-noir-950 shadow-gold transition hover:-translate-y-0.5 hover:bg-gold-400 active:scale-95 sm:px-7 sm:py-3.5"
+                    className="flex items-center gap-2 rounded-full bg-gold-500 px-5 py-3 text-sm font-semibold text-noir-950 shadow-gold transition hover:-translate-y-0.5 hover:bg-gold-400 active:scale-95 sm:px-7 sm:py-3.5"
                   >
+                    <Bag2Bold size={18} />
                     {banner.ctaLabel}
                   </Link>
                 )}
-                <Link
-                  to="/catalogo"
-                  className="rounded-full border border-cream-100/30 px-5 py-3 text-sm font-medium text-cream-100 transition hover:-translate-y-0.5 hover:bg-cream-100/10 active:scale-95 sm:px-7 sm:py-3.5"
-                >
-                  Ver catálogo
-                </Link>
               </motion.div>
+
+              {bannerCoupon && (
+                <motion.div
+                  variants={item}
+                  className="flex items-center gap-3 rounded-2xl border border-gold-500/30 bg-noir-900/60 px-4 py-3 backdrop-blur-sm"
+                >
+                  <TagPriceBold size={22} className="shrink-0 text-gold-400" />
+                  <p className="text-sm text-cream-100">
+                    <span className="font-semibold text-gold-400">
+                      {couponHeadline(bannerCoupon)}
+                    </span>{' '}
+                    {couponContext(bannerCoupon)}
+                    <br />
+                    <span className="text-xs text-cream-300">Use o cupom: {bannerCoupon.code}</span>
+                  </p>
+                </motion.div>
+              )}
             </motion.div>
           </AnimatePresence>
 
           {slides.length > 1 && (
-            <div className="flex items-center gap-2 pt-4 sm:pt-6">
-              {slides.map((slide, slideIndex) => (
-                <button
-                  key={slide.id}
-                  type="button"
-                  onClick={() => setIndex(slideIndex)}
-                  aria-label={`Ir para o banner ${slideIndex + 1}`}
-                  aria-current={slideIndex === index}
-                  className={`h-2 rounded-full transition-all ${
-                    slideIndex === index
-                      ? 'w-6 bg-gold-500'
-                      : 'w-2 bg-cream-100/30 hover:bg-cream-100/50'
-                  }`}
-                />
-              ))}
+            <div className="flex items-center gap-3 pt-4 sm:pt-6">
+              <button
+                type="button"
+                onClick={goToPrev}
+                aria-label="Banner anterior"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-cream-100/20 text-cream-100 transition hover:border-gold-500 hover:text-gold-400 sm:hidden"
+              >
+                <AltArrowLeftLinear size={16} />
+              </button>
+              <div className="flex items-center gap-2">
+                {slides.map((slide, slideIndex) => (
+                  <button
+                    key={slide.id}
+                    type="button"
+                    onClick={() => setIndex(slideIndex)}
+                    aria-label={`Ir para o banner ${slideIndex + 1}`}
+                    aria-current={slideIndex === index}
+                    className={`h-2 rounded-full transition-all ${
+                      slideIndex === index
+                        ? 'w-6 bg-gold-500'
+                        : 'w-2 bg-cream-100/30 hover:bg-cream-100/50'
+                    }`}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={goToNext}
+                aria-label="Próximo banner"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-cream-100/20 text-cream-100 transition hover:border-gold-500 hover:text-gold-400 sm:hidden"
+              >
+                <AltArrowRightLinear size={16} />
+              </button>
             </div>
           )}
         </div>

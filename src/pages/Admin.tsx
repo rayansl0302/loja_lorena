@@ -422,6 +422,7 @@ export function Admin() {
       >
         <BannerForm
           editingBanner={editingBanner}
+          allCoupons={coupons}
           onSubmit={handleBannerSubmit}
           onCancel={closeBannerModal}
         />
