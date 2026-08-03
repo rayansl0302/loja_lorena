@@ -67,9 +67,11 @@ export function Login() {
     if (googleSubmitting) return
     setGoogleSubmitting(true)
     setError('')
-    // Redireciona a aba inteira pro Google — a página recarrega quando ela volta,
-    // então não há nada pra fazer aqui depois da chamada.
-    await loginWithGoogle()
+    try {
+      await loginWithGoogle()
+    } finally {
+      setGoogleSubmitting(false)
+    }
   }
 
   return (

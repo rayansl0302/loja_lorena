@@ -3,6 +3,7 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
   type User,
@@ -123,10 +124,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRedirectError('Firebase não está configurado neste ambiente.')
       return
     }
-    // Redireciona a própria aba pro Google, em vez de abrir popup — evita falhas
-    // causadas por navegadores bloqueando a comunicação popup ↔ janela principal
-    // (proteção contra cookies/armazenamento de terceiros).
-    await signInWithRedirect(auth, googleProvider)
+
+    try {
+      // Popup funciona melhor no localhost (redirect costuma falhar com
+      // auth/network-request-failed por bloqueio de cookies de terceiros).
+      const result = await signInWithPopup(auth, googleProvider)
+      if (!(await verifyAdminAccess(result.user.email))) {
+        await signOut(auth)
+        setRedirectError('Essa conta Google não tem permissão de admin.')
+      }
+    } catch (error) {
+      const code =
+        typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+
+      if (code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, googleProvider)
+          return
+        } catch (redirectError) {
+          setRedirectError(friendlyAuthError(redirectError))
+          return
+        }
+      }
+
+      setRedirectError(friendlyAuthError(error))
+    }
   }
 
   function logout() {
