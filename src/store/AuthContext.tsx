@@ -16,12 +16,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-const OWNER_EMAIL = String(import.meta.env.VITE_OWNER_EMAIL ?? '')
-  .trim()
-  .toLowerCase()
+const OWNER_EMAILS = String(import.meta.env.VITE_OWNER_EMAIL ?? '')
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean)
 
 function isOwnerEmail(email: string | null | undefined): boolean {
-  return Boolean(email) && OWNER_EMAIL.length > 0 && email!.toLowerCase() === OWNER_EMAIL
+  return Boolean(email) && OWNER_EMAILS.includes(email!.toLowerCase())
 }
 
 async function verifyAdminAccess(email: string | null | undefined): Promise<boolean> {

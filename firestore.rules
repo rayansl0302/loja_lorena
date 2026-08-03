@@ -3,11 +3,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Dono da loja — único e-mail com poder de decidir quem mais entra no admin.
+    // Dono(s) da loja — únicos e-mails com poder de decidir quem mais entra no admin.
     // Não dá pra tornar isso dinâmico (regras não conseguem confiar em si mesmas para
     // definir sua própria raiz de confiança), por isso fica fixo aqui.
+    // admin@admin.com = login de e-mail/senha em uso agora; rayansl0302@gmail.com fica
+    // pronto pra quando o login com Google voltar.
     function isOwner() {
-      return request.auth != null && request.auth.token.email == 'rayansl0302@gmail.com';
+      return request.auth != null
+             && request.auth.token.email in ['admin@admin.com', 'rayansl0302@gmail.com'];
     }
 
     // Admin = dono, ou qualquer e-mail que o dono tenha cadastrado na coleção /admins.
