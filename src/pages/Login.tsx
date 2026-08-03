@@ -7,7 +7,7 @@ import { Logo } from '@/components/Logo'
 import { BackButton } from '@/components/BackButton'
 
 export function Login() {
-  const { isAuthenticated, login, loginWithGoogle, loginWithApple } = useAuth()
+  const { isAuthenticated, login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -15,8 +15,7 @@ export function Login() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleSubmitting, setGoogleSubmitting] = useState(false)
-  const [appleSubmitting, setAppleSubmitting] = useState(false)
-  const anySubmitting = submitting || googleSubmitting || appleSubmitting
+  const anySubmitting = submitting || googleSubmitting
 
   if (isAuthenticated) {
     return <Navigate to="/admin" replace />
@@ -46,19 +45,6 @@ export function Login() {
     } else {
       setError(result.reason)
       setGoogleSubmitting(false)
-    }
-  }
-
-  async function handleAppleLogin() {
-    if (anySubmitting) return
-    setAppleSubmitting(true)
-    setError('')
-    const result = await loginWithApple()
-    if (result.ok) {
-      navigate('/admin')
-    } else {
-      setError(result.reason)
-      setAppleSubmitting(false)
     }
   }
 
@@ -146,49 +132,33 @@ export function Login() {
             <div className="h-px flex-1 bg-noir-700" />
           </div>
 
-          <div className="flex flex-col gap-3">
-            <motion.button
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={anySubmitting}
-              whileTap={googleSubmitting ? undefined : { scale: 0.97 }}
-              className="flex w-full items-center justify-center gap-3 rounded-full border border-noir-700 bg-noir-800 py-3 font-medium text-cream-100 transition hover:border-gold-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-                <path
-                  fill="#4285F4"
-                  d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615Z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332Z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58Z"
-                />
-              </svg>
-              {googleSubmitting ? 'Entrando...' : 'Entrar com Google'}
-            </motion.button>
-
-            <motion.button
-              type="button"
-              onClick={handleAppleLogin}
-              disabled={anySubmitting}
-              whileTap={appleSubmitting ? undefined : { scale: 0.97 }}
-              className="flex w-full items-center justify-center gap-3 rounded-full border border-noir-700 bg-noir-800 py-3 font-medium text-cream-100 transition hover:border-gold-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" fill="currentColor">
-                <path d="M13.14 2.9c.56-.68.94-1.62.84-2.56-.8.03-1.78.53-2.36 1.21-.52.6-.98 1.57-.86 2.48.9.07 1.82-.46 2.38-1.13Z" />
-                <path d="M15.98 12.85c-.25.57-.55 1.1-.9 1.6-.48.7-.87 1.18-1.17 1.45-.46.44-.96.67-1.49.68-.38.01-.84-.11-1.37-.35-.53-.24-1.02-.35-1.47-.35-.47 0-.97.11-1.51.35-.54.24-.97.36-1.31.37-.51.02-1.02-.21-1.53-.7-.32-.29-.73-.79-1.23-1.51-.53-.77-.97-1.66-1.31-2.68-.37-1.1-.55-2.16-.55-3.19 0-1.18.25-2.19.76-3.05.4-.68.93-1.22 1.6-1.61.66-.4 1.38-.6 2.15-.61.4 0 .93.13 1.6.38.66.25 1.09.38 1.28.38.14 0 .61-.15 1.4-.44.75-.27 1.38-.38 1.9-.34 1.4.11 2.46.67 3.15 1.66-1.25.76-1.87 1.82-1.86 3.19.01 1.06.39 1.94 1.14 2.65.34.32.72.57 1.14.75-.09.27-.19.53-.3.79Z" />
-              </svg>
-              {appleSubmitting ? 'Entrando...' : 'Entrar com Apple'}
-            </motion.button>
-          </div>
+          <motion.button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={anySubmitting}
+            whileTap={googleSubmitting ? undefined : { scale: 0.97 }}
+            className="flex w-full items-center justify-center gap-3 rounded-full border border-noir-700 bg-noir-800 py-3 font-medium text-cream-100 transition hover:border-gold-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+              <path
+                fill="#4285F4"
+                d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615Z"
+              />
+              <path
+                fill="#34A853"
+                d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332Z"
+              />
+              <path
+                fill="#EA4335"
+                d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58Z"
+              />
+            </svg>
+            {googleSubmitting ? 'Entrando...' : 'Entrar com Google'}
+          </motion.button>
         </motion.div>
       </div>
     </div>

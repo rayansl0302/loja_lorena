@@ -9,7 +9,7 @@ import {
   type AuthProvider as FirebaseAuthProvider,
   type User,
 } from 'firebase/auth'
-import { auth, appleProvider, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
+import { auth, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
 import { isRegisteredAdmin } from '@/lib/adminAccess'
 
 type LoginResult = { ok: true } | { ok: false; reason: string }
@@ -21,7 +21,6 @@ interface AuthContextValue {
   userEmail: string | null
   login: (email: string, password: string) => Promise<LoginResult>
   loginWithGoogle: () => Promise<LoginResult>
-  loginWithApple: () => Promise<LoginResult>
   logout: () => void
 }
 
@@ -136,10 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return loginWithOAuth(googleProvider)
   }
 
-  function loginWithApple(): Promise<LoginResult> {
-    return loginWithOAuth(appleProvider)
-  }
-
   function logout() {
     if (auth) void signOut(auth)
   }
@@ -151,7 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userEmail: user?.email ?? null,
     login,
     loginWithGoogle,
-    loginWithApple,
     logout,
   }
 
