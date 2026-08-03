@@ -15,6 +15,12 @@ export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.authDomain,
 )
 
+console.log('[firebase] config carregada neste build:', {
+  ...firebaseConfig,
+  apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.slice(0, 8)}...` : firebaseConfig.apiKey,
+  isFirebaseConfigured,
+})
+
 const app = isFirebaseConfigured ? (getApps()[0] ?? initializeApp(firebaseConfig)) : null
 
 export const db: Firestore | null = app ? getFirestore(app) : null

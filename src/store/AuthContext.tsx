@@ -78,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isFirebaseConfigured || !auth) {
       return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
     }
+    console.log('[auth] authDomain em uso:', auth.app.options.authDomain)
     try {
       const result = await signInWithEmailAndPassword(auth, email.trim(), password)
       if (!(await verifyAdminAccess(result.user.email))) {
@@ -86,6 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { ok: true }
     } catch (error) {
+      console.error('[auth] ERRO BRUTO:', error)
+      console.error('[auth] name/message/code:', {
+        name: (error as Error)?.name,
+        message: (error as Error)?.message,
+        code: (error as { code?: string })?.code,
+      })
       return { ok: false, reason: friendlyAuthError(error) }
     }
   }
