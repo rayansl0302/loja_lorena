@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { EyeBold, EyeClosedBold } from 'solar-icon-set'
 import { useAuth } from '@/store/AuthContext'
 import { Logo } from '@/components/Logo'
 import { BackButton } from '@/components/BackButton'
@@ -10,6 +11,7 @@ export function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -68,14 +70,24 @@ export function Login() {
 
             <label className="flex flex-col gap-1.5 text-sm text-cream-100">
               Senha
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-                className="rounded-xl border border-noir-700 bg-noir-800 px-4 py-2.5 text-cream-100 outline-none transition focus:border-gold-500"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                  className="w-full rounded-xl border border-noir-700 bg-noir-800 px-4 py-2.5 pr-11 text-cream-100 outline-none transition focus:border-gold-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-cream-300 transition hover:text-gold-400"
+                >
+                  {showPassword ? <EyeClosedBold size={18} /> : <EyeBold size={18} />}
+                </button>
+              </div>
             </label>
 
             {error && (
