@@ -4,9 +4,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
+import { doc, updateDoc, writeBatch } from 'firebase/firestore'
 import type { CartItem, Product, Size } from '@/types/product'
 import type { Banner } from '@/types/banner'
 import type { Coupon } from '@/types/coupon'
@@ -26,16 +28,20 @@ import {
   lookupCustomerProfile,
   saveCustomerProfile as persistCustomerProfile,
 } from '@/lib/customerProfile'
+import { db, isFirebaseConfigured } from '@/lib/firebase'
+import { subscribeCollection, setItem, deleteItem, replaceCollectionWithSeed } from '@/lib/firestoreCrud'
+import { useAuth } from './AuthContext'
 
-const PRODUCTS_KEY = 'lorena:products'
 const CART_KEY = 'lorena:cart'
-const BANNERS_KEY = 'lorena:banners'
-const COUPONS_KEY = 'lorena:coupons'
 const CART_COUPON_KEY = 'lorena:cart-coupon'
 const CART_COUPON_CPF_KEY = 'lorena:cart-coupon-cpf'
 const CUSTOMER_NAME_KEY = 'lorena:customer-name'
 const CUSTOMER_CPF_KEY = 'lorena:customer-cpf'
 const CUSTOMER_PHONE_KEY = 'lorena:customer-phone'
+
+const PRODUCTS_COLLECTION = 'products'
+const BANNERS_COLLECTION = 'banners'
+const COUPONS_COLLECTION = 'coupons'
 
 export type ToastType = 'success' | 'error' | 'info'
 
@@ -52,27 +58,27 @@ export type ApplyCouponResult =
 interface ShopContextValue {
   products: Product[]
   activeProducts: Product[]
-  addProduct: (product: Omit<Product, 'id'>) => void
-  updateProduct: (id: string, product: Omit<Product, 'id'>) => void
-  deleteProduct: (id: string) => void
-  toggleProductActive: (id: string) => void
-  restoreSeed: () => void
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>
+  updateProduct: (id: string, product: Omit<Product, 'id'>) => Promise<void>
+  deleteProduct: (id: string) => Promise<void>
+  toggleProductActive: (id: string) => Promise<void>
+  restoreSeed: () => Promise<void>
 
   banners: Banner[]
   activeBanners: Banner[]
-  addBanner: (banner: Omit<Banner, 'id' | 'order'>) => void
-  updateBanner: (id: string, banner: Omit<Banner, 'id' | 'order'>) => void
-  deleteBanner: (id: string) => void
-  toggleBannerActive: (id: string) => void
-  moveBanner: (id: string, direction: 'up' | 'down') => void
-  restoreBannerSeed: () => void
+  addBanner: (banner: Omit<Banner, 'id' | 'order'>) => Promise<void>
+  updateBanner: (id: string, banner: Omit<Banner, 'id' | 'order'>) => Promise<void>
+  deleteBanner: (id: string) => Promise<void>
+  toggleBannerActive: (id: string) => Promise<void>
+  moveBanner: (id: string, direction: 'up' | 'down') => Promise<void>
+  restoreBannerSeed: () => Promise<void>
 
   coupons: Coupon[]
-  addCoupon: (coupon: Omit<Coupon, 'id'>) => void
-  updateCoupon: (id: string, coupon: Omit<Coupon, 'id'>) => void
-  deleteCoupon: (id: string) => void
-  toggleCouponActive: (id: string) => void
-  restoreCouponSeed: () => void
+  addCoupon: (coupon: Omit<Coupon, 'id'>) => Promise<void>
+  updateCoupon: (id: string, coupon: Omit<Coupon, 'id'>) => Promise<void>
+  deleteCoupon: (id: string) => Promise<void>
+  toggleCouponActive: (id: string) => Promise<void>
+  restoreCouponSeed: () => Promise<void>
 
   cart: CartItem[]
   addToCart: (product: Product, size: Size, quantity?: number) => void
@@ -138,12 +144,24 @@ function generateId(name: string): string {
   return `${slug}-${Date.now().toString(36)}`
 }
 
+function friendlyFirestoreError(error: unknown): string {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+  if (code === 'permission-denied') {
+    return 'Sem permissão para essa ação. Faça login como admin.'
+  }
+  if (code === 'unavailable') {
+    return 'Sem conexão com o servidor agora. Tente novamente.'
+  }
+  return 'Não foi possível salvar. Tente novamente.'
+}
+
 export function ShopProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<Product[]>(() =>
-    readStorage(PRODUCTS_KEY, seedProducts),
-  )
-  const [banners, setBanners] = useState<Banner[]>(() => readStorage(BANNERS_KEY, bannerSeed))
-  const [coupons, setCoupons] = useState<Coupon[]>(() => readStorage(COUPONS_KEY, couponSeed))
+  const { isAuthenticated } = useAuth()
+
+  const [products, setProducts] = useState<Product[]>([])
+  const [banners, setBanners] = useState<Banner[]>([])
+  const [coupons, setCoupons] = useState<Coupon[]>([])
+
   const [cart, setCart] = useState<CartItem[]>(() => readStorage(CART_KEY, []))
   const [appliedCouponCode, setAppliedCouponCode] = useState<string>(() =>
     readStorage(CART_COUPON_KEY, ''),
@@ -161,17 +179,67 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
 
-  useEffect(() => {
-    writeStorage(PRODUCTS_KEY, products)
-  }, [products])
+  const seededProductsRef = useRef(false)
+  const seededBannersRef = useRef(false)
+  const seededCouponsRef = useRef(false)
+
+  const showToast = useCallback((message: string, type: ToastType = 'success') => {
+    setToast({ id: Date.now(), message, type })
+  }, [])
+
+  // --- Firestore: assinaturas em tempo real -------------------------------
 
   useEffect(() => {
-    writeStorage(BANNERS_KEY, banners)
-  }, [banners])
+    if (!isFirebaseConfigured || !db) return
+    return subscribeCollection<Product>(db, PRODUCTS_COLLECTION, setProducts, () =>
+      showToast('Não foi possível carregar os produtos.', 'error'),
+    )
+  }, [showToast])
 
   useEffect(() => {
-    writeStorage(COUPONS_KEY, coupons)
-  }, [coupons])
+    if (!isFirebaseConfigured || !db) return
+    return subscribeCollection<Banner>(db, BANNERS_COLLECTION, setBanners, () =>
+      showToast('Não foi possível carregar os banners.', 'error'),
+    )
+  }, [showToast])
+
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db) return
+    return subscribeCollection<Coupon>(db, COUPONS_COLLECTION, setCoupons, () =>
+      showToast('Não foi possível carregar os cupons.', 'error'),
+    )
+  }, [showToast])
+
+  // --- Auto-seed: só quando o admin loga e a coleção está vazia -----------
+
+  useEffect(() => {
+    if (!isAuthenticated || !isFirebaseConfigured || !db) return
+    if (products.length > 0 || seededProductsRef.current) return
+    seededProductsRef.current = true
+    replaceCollectionWithSeed(db, PRODUCTS_COLLECTION, [], seedProducts).catch(() => {
+      seededProductsRef.current = false
+    })
+  }, [isAuthenticated, products.length])
+
+  useEffect(() => {
+    if (!isAuthenticated || !isFirebaseConfigured || !db) return
+    if (banners.length > 0 || seededBannersRef.current) return
+    seededBannersRef.current = true
+    replaceCollectionWithSeed(db, BANNERS_COLLECTION, [], bannerSeed).catch(() => {
+      seededBannersRef.current = false
+    })
+  }, [isAuthenticated, banners.length])
+
+  useEffect(() => {
+    if (!isAuthenticated || !isFirebaseConfigured || !db) return
+    if (coupons.length > 0 || seededCouponsRef.current) return
+    seededCouponsRef.current = true
+    replaceCollectionWithSeed(db, COUPONS_COLLECTION, [], couponSeed).catch(() => {
+      seededCouponsRef.current = false
+    })
+  }, [isAuthenticated, coupons.length])
+
+  // --- Persistência local: só o estritamente necessário (sessão do visitante) --
 
   useEffect(() => {
     writeStorage(CART_KEY, cart)
@@ -203,192 +271,281 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer)
   }, [toast])
 
-  const showToast = useCallback((message: string, type: ToastType = 'success') => {
-    setToast({ id: Date.now(), message, type })
-  }, [])
+  // --- Produtos -------------------------------------------------------------
 
   const addProduct = useCallback(
-    (product: Omit<Product, 'id'>) => {
-      setProducts((prev) => [...prev, { ...product, id: generateId(product.name) }])
-      showToast('Produto cadastrado com sucesso')
+    async (product: Omit<Product, 'id'>) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      try {
+        await setItem(db, PRODUCTS_COLLECTION, { ...product, id: generateId(product.name) })
+        showToast('Produto cadastrado com sucesso')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [showToast],
   )
 
   const updateProduct = useCallback(
-    (id: string, product: Omit<Product, 'id'>) => {
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...product, id } : p)))
-      showToast('Produto atualizado')
+    async (id: string, product: Omit<Product, 'id'>) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      try {
+        await setItem(db, PRODUCTS_COLLECTION, { ...product, id })
+        showToast('Produto atualizado')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [showToast],
   )
 
   const deleteProduct = useCallback(
-    (id: string) => {
-      setProducts((prev) => prev.filter((p) => p.id !== id))
-      showToast('Produto removido', 'info')
+    async (id: string) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      try {
+        await deleteItem(db, PRODUCTS_COLLECTION, id)
+        showToast('Produto removido', 'info')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [showToast],
   )
 
   const toggleProductActive = useCallback(
-    (id: string) => {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, active: !(p.active !== false) } : p)),
-      )
+    async (id: string) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
       const product = products.find((p) => p.id === id)
       const willBeActive = product ? product.active === false : true
-      showToast(willBeActive ? 'Produto ativado' : 'Produto desativado', 'info')
+      try {
+        await updateDoc(doc(db, PRODUCTS_COLLECTION, id), { active: willBeActive })
+        showToast(willBeActive ? 'Produto ativado' : 'Produto desativado', 'info')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [products, showToast],
   )
 
   const activeProducts = useMemo(() => products.filter((p) => p.active !== false), [products])
 
-  const restoreSeed = useCallback(() => {
-    setProducts(seedProducts)
-    showToast('Catálogo restaurado para o padrão', 'info')
-  }, [showToast])
+  const restoreSeed = useCallback(async () => {
+    if (!db) return showToast('Firebase não está configurado.', 'error')
+    try {
+      await replaceCollectionWithSeed(
+        db,
+        PRODUCTS_COLLECTION,
+        products.map((p) => p.id),
+        seedProducts,
+      )
+      showToast('Catálogo restaurado para o padrão', 'info')
+    } catch (error) {
+      showToast(friendlyFirestoreError(error), 'error')
+    }
+  }, [products, showToast])
+
+  // --- Banners ----------------------------------------------------------
 
   const addBanner = useCallback(
-    (banner: Omit<Banner, 'id' | 'order'>) => {
-      setBanners((prev) => {
-        const nextOrder = prev.length > 0 ? Math.max(...prev.map((b) => b.order)) + 1 : 0
-        return [...prev, { ...banner, id: generateId(banner.title), order: nextOrder }]
-      })
-      showToast('Banner cadastrado com sucesso')
+    async (banner: Omit<Banner, 'id' | 'order'>) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      const nextOrder = banners.length > 0 ? Math.max(...banners.map((b) => b.order)) + 1 : 0
+      try {
+        await setItem(db, BANNERS_COLLECTION, {
+          ...banner,
+          id: generateId(banner.title),
+          order: nextOrder,
+        })
+        showToast('Banner cadastrado com sucesso')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
-    [showToast],
+    [banners, showToast],
   )
 
   const updateBanner = useCallback(
-    (id: string, banner: Omit<Banner, 'id' | 'order'>) => {
-      setBanners((prev) =>
-        prev.map((b) => (b.id === id ? { ...banner, id, order: b.order } : b)),
-      )
-      showToast('Banner atualizado')
+    async (id: string, banner: Omit<Banner, 'id' | 'order'>) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      const current = banners.find((b) => b.id === id)
+      try {
+        await setItem(db, BANNERS_COLLECTION, { ...banner, id, order: current?.order ?? 0 })
+        showToast('Banner atualizado')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
-    [showToast],
+    [banners, showToast],
   )
 
   const deleteBanner = useCallback(
-    (id: string) => {
-      setBanners((prev) => prev.filter((b) => b.id !== id))
-      showToast('Banner removido', 'info')
+    async (id: string) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      try {
+        await deleteItem(db, BANNERS_COLLECTION, id)
+        showToast('Banner removido', 'info')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [showToast],
   )
 
   const toggleBannerActive = useCallback(
-    (id: string) => {
-      setBanners((prev) =>
-        prev.map((b) => (b.id === id ? { ...b, active: !(b.active !== false) } : b)),
-      )
+    async (id: string) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
       const banner = banners.find((b) => b.id === id)
       const willBeActive = banner ? banner.active === false : true
-      showToast(willBeActive ? 'Banner ativado' : 'Banner desativado', 'info')
+      try {
+        await updateDoc(doc(db, BANNERS_COLLECTION, id), { active: willBeActive })
+        showToast(willBeActive ? 'Banner ativado' : 'Banner desativado', 'info')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [banners, showToast],
   )
 
-  const moveBanner = useCallback((id: string, direction: 'up' | 'down') => {
-    setBanners((prev) => {
-      const sorted = [...prev].sort((a, b) => a.order - b.order)
+  const moveBanner = useCallback(
+    async (id: string, direction: 'up' | 'down') => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
+      const sorted = [...banners].sort((a, b) => a.order - b.order)
       const index = sorted.findIndex((b) => b.id === id)
       const swapIndex = direction === 'up' ? index - 1 : index + 1
-      if (index === -1 || swapIndex < 0 || swapIndex >= sorted.length) return prev
+      if (index === -1 || swapIndex < 0 || swapIndex >= sorted.length) return
 
       const current = sorted[index]
       const swapTarget = sorted[swapIndex]
-      const currentOrder = current.order
-      const swapOrder = swapTarget.order
-
-      return prev.map((b) => {
-        if (b.id === current.id) return { ...b, order: swapOrder }
-        if (b.id === swapTarget.id) return { ...b, order: currentOrder }
-        return b
-      })
-    })
-  }, [])
+      try {
+        const batch = writeBatch(db)
+        batch.update(doc(db, BANNERS_COLLECTION, current.id), { order: swapTarget.order })
+        batch.update(doc(db, BANNERS_COLLECTION, swapTarget.id), { order: current.order })
+        await batch.commit()
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
+    },
+    [banners, showToast],
+  )
 
   const activeBanners = useMemo(
     () => banners.filter((b) => b.active !== false).sort((a, b) => a.order - b.order),
     [banners],
   )
 
-  const restoreBannerSeed = useCallback(() => {
-    setBanners(bannerSeed)
-    showToast('Banners restaurados para o padrão', 'info')
-  }, [showToast])
+  const restoreBannerSeed = useCallback(async () => {
+    if (!db) return showToast('Firebase não está configurado.', 'error')
+    try {
+      await replaceCollectionWithSeed(
+        db,
+        BANNERS_COLLECTION,
+        banners.map((b) => b.id),
+        bannerSeed,
+      )
+      showToast('Banners restaurados para o padrão', 'info')
+    } catch (error) {
+      showToast(friendlyFirestoreError(error), 'error')
+    }
+  }, [banners, showToast])
+
+  // --- Cupons -------------------------------------------------------------
 
   const addCoupon = useCallback(
-    (coupon: Omit<Coupon, 'id'>) => {
+    async (coupon: Omit<Coupon, 'id'>) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
       const code = normalizeCouponCode(coupon.code)
-      setCoupons((prev) => {
-        if (prev.some((c) => c.code === code)) {
-          return prev
-        }
-        return [...prev, { ...coupon, code, id: generateId(code) }]
-      })
-      showToast('Cupom cadastrado com sucesso')
+      if (coupons.some((c) => c.code === code)) {
+        showToast('Já existe um cupom com esse código.', 'error')
+        return
+      }
+      try {
+        await setItem(db, COUPONS_COLLECTION, { ...coupon, code, id: generateId(code) })
+        showToast('Cupom cadastrado com sucesso')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
-    [showToast],
+    [coupons, showToast],
   )
 
   const updateCoupon = useCallback(
-    (id: string, coupon: Omit<Coupon, 'id'>) => {
+    async (id: string, coupon: Omit<Coupon, 'id'>) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
       const code = normalizeCouponCode(coupon.code)
-      setCoupons((prev) => {
-        if (prev.some((c) => c.code === code && c.id !== id)) {
+      if (coupons.some((c) => c.code === code && c.id !== id)) {
+        showToast('Já existe um cupom com esse código.', 'error')
+        return
+      }
+      try {
+        await setItem(db, COUPONS_COLLECTION, { ...coupon, code, id })
+        setAppliedCouponCode((prev) => {
+          const current = coupons.find((c) => c.id === id)
+          if (current && prev === current.code) return code
           return prev
-        }
-        return prev.map((c) => (c.id === id ? { ...coupon, code, id } : c))
-      })
-      setAppliedCouponCode((prev) => {
-        const current = coupons.find((c) => c.id === id)
-        if (current && prev === current.code) return code
-        return prev
-      })
-      showToast('Cupom atualizado')
+        })
+        showToast('Cupom atualizado')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
+      }
     },
     [coupons, showToast],
   )
 
   const deleteCoupon = useCallback(
-    (id: string) => {
+    async (id: string) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
       const removed = coupons.find((c) => c.id === id)
-      setCoupons((prev) => prev.filter((c) => c.id !== id))
-      if (removed && appliedCouponCode === removed.code) {
-        setAppliedCouponCode('')
-        setAppliedCouponCpf('')
+      try {
+        await deleteItem(db, COUPONS_COLLECTION, id)
+        if (removed && appliedCouponCode === removed.code) {
+          setAppliedCouponCode('')
+          setAppliedCouponCpf('')
+        }
+        showToast('Cupom removido', 'info')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
       }
-      showToast('Cupom removido', 'info')
     },
     [appliedCouponCode, coupons, showToast],
   )
 
   const toggleCouponActive = useCallback(
-    (id: string) => {
-      setCoupons((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, active: !(c.active !== false) } : c)),
-      )
+    async (id: string) => {
+      if (!db) return showToast('Firebase não está configurado.', 'error')
       const coupon = coupons.find((c) => c.id === id)
       const willBeActive = coupon ? coupon.active === false : true
-      if (coupon && !willBeActive && appliedCouponCode === coupon.code) {
-        setAppliedCouponCode('')
-        setAppliedCouponCpf('')
+      try {
+        await updateDoc(doc(db, COUPONS_COLLECTION, id), { active: willBeActive })
+        if (coupon && !willBeActive && appliedCouponCode === coupon.code) {
+          setAppliedCouponCode('')
+          setAppliedCouponCpf('')
+        }
+        showToast(willBeActive ? 'Cupom ativado' : 'Cupom desativado', 'info')
+      } catch (error) {
+        showToast(friendlyFirestoreError(error), 'error')
       }
-      showToast(willBeActive ? 'Cupom ativado' : 'Cupom desativado', 'info')
     },
     [appliedCouponCode, coupons, showToast],
   )
 
-  const restoreCouponSeed = useCallback(() => {
-    setCoupons(couponSeed)
-    setAppliedCouponCode('')
-    setAppliedCouponCpf('')
-    showToast('Cupons restaurados para o padrão', 'info')
-  }, [showToast])
+  const restoreCouponSeed = useCallback(async () => {
+    if (!db) return showToast('Firebase não está configurado.', 'error')
+    try {
+      await replaceCollectionWithSeed(
+        db,
+        COUPONS_COLLECTION,
+        coupons.map((c) => c.id),
+        couponSeed,
+      )
+      setAppliedCouponCode('')
+      setAppliedCouponCpf('')
+      showToast('Cupons restaurados para o padrão', 'info')
+    } catch (error) {
+      showToast(friendlyFirestoreError(error), 'error')
+    }
+  }, [coupons, showToast])
+
+  // --- Carrinho (permanece local — estado do visitante nesta sessão) -------
 
   const addToCart = useCallback(
     (product: Product, size: Size, quantity = 1) => {

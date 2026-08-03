@@ -15,14 +15,15 @@ import { BannerForm } from '@/components/BannerForm'
 import { BannerList } from '@/components/BannerList'
 import { CouponForm } from '@/components/CouponForm'
 import { CouponList } from '@/components/CouponList'
+import { AdminAccessManager } from '@/components/AdminAccessManager'
 import { BackButton } from '@/components/BackButton'
 
 type StatusFilter = 'todos' | 'ativos' | 'inativos'
 type CategoryFilter = 'Todas' | (typeof categories)[number]
-type AdminTab = 'produtos' | 'banners' | 'cupons'
+type AdminTab = 'produtos' | 'banners' | 'cupons' | 'administradores'
 
 export function Admin() {
-  const { logout } = useAuth()
+  const { logout, isOwner } = useAuth()
   const navigate = useNavigate()
   const {
     products,
@@ -86,25 +87,25 @@ export function Admin() {
     setEditingProduct(null)
   }
 
-  function handleProductSubmit(data: Omit<Product, 'id'>) {
+  async function handleProductSubmit(data: Omit<Product, 'id'>) {
     if (editingProduct) {
-      updateProduct(editingProduct.id, data)
+      await updateProduct(editingProduct.id, data)
     } else {
-      addProduct(data)
+      await addProduct(data)
     }
     closeProductModal()
   }
 
-  function handleDeleteProduct(id: string) {
+  async function handleDeleteProduct(id: string) {
     const product = products.find((p) => p.id === id)
     if (product && window.confirm(`Excluir permanentemente a peça "${product.name}"?`)) {
-      deleteProduct(id)
+      await deleteProduct(id)
     }
   }
 
-  function handleRestoreSeed() {
+  async function handleRestoreSeed() {
     if (window.confirm('Isso substituirá o catálogo atual pelo catálogo padrão. Continuar?')) {
-      restoreSeed()
+      await restoreSeed()
       closeProductModal()
     }
   }
@@ -124,25 +125,25 @@ export function Admin() {
     setEditingBanner(null)
   }
 
-  function handleBannerSubmit(data: Omit<Banner, 'id' | 'order'>) {
+  async function handleBannerSubmit(data: Omit<Banner, 'id' | 'order'>) {
     if (editingBanner) {
-      updateBanner(editingBanner.id, data)
+      await updateBanner(editingBanner.id, data)
     } else {
-      addBanner(data)
+      await addBanner(data)
     }
     closeBannerModal()
   }
 
-  function handleDeleteBanner(id: string) {
+  async function handleDeleteBanner(id: string) {
     const banner = banners.find((b) => b.id === id)
     if (banner && window.confirm(`Excluir permanentemente o banner "${banner.title}"?`)) {
-      deleteBanner(id)
+      await deleteBanner(id)
     }
   }
 
-  function handleRestoreBannerSeed() {
+  async function handleRestoreBannerSeed() {
     if (window.confirm('Isso substituirá os banners atuais pelos banners padrão. Continuar?')) {
-      restoreBannerSeed()
+      await restoreBannerSeed()
       closeBannerModal()
     }
   }
@@ -162,33 +163,33 @@ export function Admin() {
     setEditingCoupon(null)
   }
 
-  function handleCouponSubmit(data: Omit<Coupon, 'id'>) {
+  async function handleCouponSubmit(data: Omit<Coupon, 'id'>) {
     if (editingCoupon) {
-      updateCoupon(editingCoupon.id, data)
+      await updateCoupon(editingCoupon.id, data)
     } else {
-      addCoupon(data)
+      await addCoupon(data)
     }
     closeCouponModal()
   }
 
-  function handleDeleteCoupon(id: string) {
+  async function handleDeleteCoupon(id: string) {
     const coupon = coupons.find((c) => c.id === id)
     if (coupon && window.confirm(`Excluir permanentemente o cupom "${coupon.code}"?`)) {
-      deleteCoupon(id)
+      await deleteCoupon(id)
     }
   }
 
-  function handleRestoreCouponSeed() {
+  async function handleRestoreCouponSeed() {
     if (window.confirm('Isso substituirá os cupons atuais pelos cupons padrão. Continuar?')) {
-      restoreCouponSeed()
+      await restoreCouponSeed()
       closeCouponModal()
     }
   }
 
-  function handleRestore() {
-    if (tab === 'produtos') handleRestoreSeed()
-    else if (tab === 'banners') handleRestoreBannerSeed()
-    else handleRestoreCouponSeed()
+  async function handleRestore() {
+    if (tab === 'produtos') await handleRestoreSeed()
+    else if (tab === 'banners') await handleRestoreBannerSeed()
+    else await handleRestoreCouponSeed()
   }
 
   function restoreLabel() {
@@ -215,15 +216,17 @@ export function Admin() {
               <p className="text-xs text-cream-300">Painel da lojista</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleRestore}
-                className="flex items-center gap-2 rounded-full border border-noir-600 px-3 py-2 text-xs font-medium text-cream-300 transition hover:border-gold-500 sm:px-4 sm:text-sm"
-              >
-                <RestartLinear size={16} />
-                <span className="hidden sm:inline">{restoreLabel()}</span>
-                <span className="sm:hidden">Restaurar</span>
-              </button>
+              {tab !== 'administradores' && (
+                <button
+                  type="button"
+                  onClick={handleRestore}
+                  className="flex items-center gap-2 rounded-full border border-noir-600 px-3 py-2 text-xs font-medium text-cream-300 transition hover:border-gold-500 sm:px-4 sm:text-sm"
+                >
+                  <RestartLinear size={16} />
+                  <span className="hidden sm:inline">{restoreLabel()}</span>
+                  <span className="sm:hidden">Restaurar</span>
+                </button>
+              )}
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.96 }}
@@ -271,6 +274,19 @@ export function Admin() {
           >
             Cupons
           </button>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setTab('administradores')}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                tab === 'administradores'
+                  ? 'bg-gold-500 text-noir-950'
+                  : 'border border-noir-600 text-cream-300 hover:border-gold-500'
+              }`}
+            >
+              Administradores
+            </button>
+          )}
         </div>
       </header>
 
@@ -398,6 +414,13 @@ export function Admin() {
               onDelete={handleDeleteCoupon}
               onToggleActive={toggleCouponActive}
             />
+          </>
+        )}
+
+        {tab === 'administradores' && isOwner && (
+          <>
+            <h1 className="mb-6 font-display text-xl text-cream-100">Administradores</h1>
+            <AdminAccessManager />
           </>
         )}
       </main>

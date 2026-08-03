@@ -1,145 +1,135 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  type User,
+} from 'firebase/auth'
+import { auth, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
+import { isRegisteredAdmin } from '@/lib/adminAccess'
 
-const SESSION_KEY = 'lorena:session'
-const LOCK_KEY = 'lorena:auth-lock'
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000
-const MAX_ATTEMPTS = 5
-const LOCK_DURATIONS_MS = [60_000, 5 * 60_000, 15 * 60_000]
-
-interface SessionPayload {
-  exp: number
-}
-
-interface LockPayload {
-  fails: number
-  lockLevel: number
-  lockedUntil: number
-}
+type LoginResult = { ok: true } | { ok: false; reason: string }
 
 interface AuthContextValue {
   isAuthenticated: boolean
-  login: (username: string, password: string) => { ok: true } | { ok: false; reason: string }
+  isOwner: boolean
+  isLoading: boolean
+  userEmail: string | null
+  login: (email: string, password: string) => Promise<LoginResult>
+  loginWithGoogle: () => Promise<LoginResult>
   logout: () => void
-  getLockRemainingMs: () => number
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function readJson<T>(key: string): T | null {
-  try {
-    const raw = sessionStorage.getItem(key) ?? localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : null
-  } catch {
-    return null
+const OWNER_EMAIL = String(import.meta.env.VITE_OWNER_EMAIL ?? '')
+  .trim()
+  .toLowerCase()
+
+function isOwnerEmail(email: string | null | undefined): boolean {
+  return Boolean(email) && OWNER_EMAIL.length > 0 && email!.toLowerCase() === OWNER_EMAIL
+}
+
+async function verifyAdminAccess(email: string | null | undefined): Promise<boolean> {
+  if (!email) return false
+  if (isOwnerEmail(email)) return true
+  return isRegisteredAdmin(email)
+}
+
+function friendlyAuthError(error: unknown): string {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'E-mail ou senha incorretos.'
+    case 'auth/too-many-requests':
+      return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Login cancelado.'
+    case 'auth/unauthorized-domain':
+      return 'Este domínio não está autorizado no Firebase Authentication.'
+    case 'auth/network-request-failed':
+      return 'Falha de conexão. Verifique sua internet e tente novamente.'
+    default:
+      return 'Não foi possível entrar. Tente novamente.'
   }
-}
-
-function getCredentials(): { username: string; password: string } | null {
-  const username = String(import.meta.env.VITE_ADMIN_USERNAME ?? '').trim().toLowerCase()
-  const password = String(import.meta.env.VITE_ADMIN_PASSWORD ?? '')
-  if (username && password) return { username, password }
-  if (import.meta.env.DEV) return { username: 'loja', password: 'moda123' }
-  return null
-}
-
-function readValidSession(): boolean {
-  const payload = readJson<SessionPayload>(SESSION_KEY)
-  if (!payload?.exp) {
-    localStorage.removeItem(SESSION_KEY)
-    sessionStorage.removeItem(SESSION_KEY)
-    return false
-  }
-  if (Date.now() > payload.exp) {
-    localStorage.removeItem(SESSION_KEY)
-    sessionStorage.removeItem(SESSION_KEY)
-    return false
-  }
-  return true
-}
-
-function readLock(): LockPayload {
-  return (
-    readJson<LockPayload>(LOCK_KEY) ?? {
-      fails: 0,
-      lockLevel: 0,
-      lockedUntil: 0,
-    }
-  )
-}
-
-function writeLock(lock: LockPayload) {
-  sessionStorage.setItem(LOCK_KEY, JSON.stringify(lock))
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => readValidSession())
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const getLockRemainingMs = useCallback(() => {
-    const lock = readLock()
-    return Math.max(0, lock.lockedUntil - Date.now())
-  }, [])
-
-  const login = useCallback((username: string, password: string) => {
-    const remaining = Math.max(0, readLock().lockedUntil - Date.now())
-    if (remaining > 0) {
-      const seconds = Math.ceil(remaining / 1000)
-      return {
-        ok: false as const,
-        reason: `Muitas tentativas. Tente novamente em ${seconds}s.`,
-      }
+  useEffect(() => {
+    const authInstance = auth
+    if (!isFirebaseConfigured || !authInstance) {
+      setIsLoading(false)
+      return
     }
 
-    const credentials = getCredentials()
-    if (!credentials) {
-      return {
-        ok: false as const,
-        reason: 'Acesso administrativo indisponível. Configure as credenciais no ambiente.',
-      }
-    }
-
-    const valid =
-      username.trim().toLowerCase() === credentials.username && password === credentials.password
-
-    if (!valid) {
-      const lock = readLock()
-      const fails = lock.fails + 1
-      if (fails >= MAX_ATTEMPTS) {
-        const lockLevel = Math.min(lock.lockLevel + 1, LOCK_DURATIONS_MS.length)
-        const duration = LOCK_DURATIONS_MS[lockLevel - 1] ?? LOCK_DURATIONS_MS.at(-1)!
-        writeLock({
-          fails: 0,
-          lockLevel,
-          lockedUntil: Date.now() + duration,
-        })
-        return {
-          ok: false as const,
-          reason: `Credenciais inválidas. Acesso bloqueado por ${Math.ceil(duration / 1000)}s.`,
+    const unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
+      void (async () => {
+        if (nextUser && !(await verifyAdminAccess(nextUser.email))) {
+          await signOut(authInstance)
+          setUser(null)
+        } else {
+          setUser(nextUser)
         }
-      }
-      writeLock({ ...lock, fails })
-      return { ok: false as const, reason: 'Credenciais inválidas.' }
+        setIsLoading(false)
+      })()
+    })
+    return unsubscribe
+  }, [])
+
+  async function login(email: string, password: string): Promise<LoginResult> {
+    if (!isFirebaseConfigured || !auth) {
+      return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
     }
+    try {
+      const result = await signInWithEmailAndPassword(auth, email.trim(), password)
+      if (!(await verifyAdminAccess(result.user.email))) {
+        await signOut(auth)
+        return { ok: false, reason: 'Esse e-mail não tem permissão de admin.' }
+      }
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: friendlyAuthError(error) }
+    }
+  }
 
-    sessionStorage.removeItem(LOCK_KEY)
-    const exp = Date.now() + SESSION_TTL_MS
-    const payload = JSON.stringify({ exp } satisfies SessionPayload)
-    sessionStorage.setItem(SESSION_KEY, payload)
-    localStorage.removeItem(SESSION_KEY)
-    setIsAuthenticated(true)
-    return { ok: true as const }
-  }, [])
+  async function loginWithGoogle(): Promise<LoginResult> {
+    if (!isFirebaseConfigured || !auth) {
+      return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
+    }
+    try {
+      const result = await signInWithPopup(auth, googleProvider)
+      if (!(await verifyAdminAccess(result.user.email))) {
+        await signOut(auth)
+        return { ok: false, reason: 'Essa conta Google não tem permissão de admin.' }
+      }
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: friendlyAuthError(error) }
+    }
+  }
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(SESSION_KEY)
-    sessionStorage.removeItem(SESSION_KEY)
-    setIsAuthenticated(false)
-  }, [])
+  function logout() {
+    if (auth) void signOut(auth)
+  }
 
-  return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, getLockRemainingMs }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const value: AuthContextValue = {
+    isAuthenticated: user !== null,
+    isOwner: isOwnerEmail(user?.email),
+    isLoading,
+    userEmail: user?.email ?? null,
+    login,
+    loginWithGoogle,
+    logout,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth(): AuthContextValue {

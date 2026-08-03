@@ -3,6 +3,52 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Dono da loja — único e-mail com poder de decidir quem mais entra no admin.
+    // Não dá pra tornar isso dinâmico (regras não conseguem confiar em si mesmas para
+    // definir sua própria raiz de confiança), por isso fica fixo aqui.
+    function isOwner() {
+      return request.auth != null && request.auth.token.email == 'rayansl0302@gmail.com';
+    }
+
+    // Admin = dono, ou qualquer e-mail que o dono tenha cadastrado na coleção /admins.
+    function isAdmin() {
+      return isOwner()
+             || (request.auth != null
+                 && exists(/databases/$(database)/documents/admins/$(request.auth.token.email)));
+    }
+
+    // Lista de lojistas autorizadas, mantida pelo dono através da aba "Administradores".
+    // Cada documento é `admins/{email}`; a existência do documento já é a autorização.
+    match /admins/{email} {
+      // O dono vê a lista inteira; qualquer outra pessoa só consegue checar o
+      // próprio e-mail (necessário pro app confirmar "eu tenho acesso?" no login).
+      allow get: if isOwner() || (request.auth != null && request.auth.token.email == email);
+      allow list: if isOwner();
+
+      // Só o dono adiciona ou remove lojistas.
+      allow write: if isOwner();
+    }
+
+    // Catálogo de produtos. Leitura pública (a vitrine e o catálogo precisam carregar
+    // sem login); escrita só para admin.
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Banners do carrossel da home. Mesma lógica dos produtos.
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Cupons de desconto. Leitura pública (o carrinho precisa validar o cupom digitado
+    // pelo cliente); escrita só para admin.
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Registro de uso de cupons de "uso único por CPF".
     // O ID do documento é `${codigoDoCupom}_${sha256(cpfSomenteDigitos)}` — nenhum CPF em
     // texto puro é armazenado, só o hash como parte do identificador.
