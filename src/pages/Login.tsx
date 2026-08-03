@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/store/AuthContext'
@@ -29,13 +29,21 @@ function GoogleIcon() {
 }
 
 export function Login() {
-  const { isAuthenticated, login, loginWithGoogle } = useAuth()
+  const { isAuthenticated, login, loginWithGoogle, redirectError, clearRedirectError } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleSubmitting, setGoogleSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (redirectError) {
+      setError(redirectError)
+      setGoogleSubmitting(false)
+      clearRedirectError()
+    }
+  }, [redirectError, clearRedirectError])
 
   if (isAuthenticated) {
     return <Navigate to="/admin" replace />
@@ -59,13 +67,9 @@ export function Login() {
     if (googleSubmitting) return
     setGoogleSubmitting(true)
     setError('')
-    const result = await loginWithGoogle()
-    if (result.ok) {
-      navigate('/admin')
-    } else {
-      setError(result.reason)
-      setGoogleSubmitting(false)
-    }
+    // Redireciona a aba inteira pro Google — a página recarrega quando ela volta,
+    // então não há nada pra fazer aqui depois da chamada.
+    await loginWithGoogle()
   }
 
   return (

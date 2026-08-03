@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
+  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from 'firebase/auth'
@@ -16,8 +17,10 @@ interface AuthContextValue {
   isOwner: boolean
   isLoading: boolean
   userEmail: string | null
+  redirectError: string | null
+  clearRedirectError: () => void
   login: (email: string, password: string) => Promise<LoginResult>
-  loginWithGoogle: () => Promise<LoginResult>
+  loginWithGoogle: () => Promise<void>
   logout: () => void
 }
 
@@ -61,6 +64,9 @@ function friendlyAuthError(error: unknown): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [redirectError, setRedirectError] = useState<string | null>(null)
+
+  const clearRedirectError = useCallback(() => setRedirectError(null), [])
 
   useEffect(() => {
     const authInstance = auth
@@ -68,6 +74,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       return
     }
+
+    // Conclui o login por redirecionamento (signInWithRedirect), se a gente
+    // acabou de voltar do accounts.google.com.
+    getRedirectResult(authInstance)
+      .then(async (result) => {
+        if (result && !(await verifyAdminAccess(result.user.email))) {
+          await signOut(authInstance)
+          setRedirectError('Essa conta Google não tem permissão de admin.')
+        }
+      })
+      .catch((error) => {
+        setRedirectError(friendlyAuthError(error))
+      })
 
     const unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
       void (async () => {
@@ -99,20 +118,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function loginWithGoogle(): Promise<LoginResult> {
+  async function loginWithGoogle(): Promise<void> {
     if (!isFirebaseConfigured || !auth) {
-      return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
+      setRedirectError('Firebase não está configurado neste ambiente.')
+      return
     }
-    try {
-      const result = await signInWithPopup(auth, googleProvider)
-      if (!(await verifyAdminAccess(result.user.email))) {
-        await signOut(auth)
-        return { ok: false, reason: 'Essa conta Google não tem permissão de admin.' }
-      }
-      return { ok: true }
-    } catch (error) {
-      return { ok: false, reason: friendlyAuthError(error) }
-    }
+    // Redireciona a própria aba pro Google, em vez de abrir popup — evita falhas
+    // causadas por navegadores bloqueando a comunicação popup ↔ janela principal
+    // (proteção contra cookies/armazenamento de terceiros).
+    await signInWithRedirect(auth, googleProvider)
   }
 
   function logout() {
@@ -124,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isOwner: isOwnerEmail(user?.email),
     isLoading,
     userEmail: user?.email ?? null,
+    redirectError,
+    clearRedirectError,
     login,
     loginWithGoogle,
     logout,
