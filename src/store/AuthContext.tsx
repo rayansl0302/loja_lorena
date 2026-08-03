@@ -1,6 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
-import { auth, isFirebaseConfigured } from '@/lib/firebase'
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
+  type User,
+} from 'firebase/auth'
+import { auth, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
 import { isRegisteredAdmin } from '@/lib/adminAccess'
 
 type LoginResult = { ok: true } | { ok: false; reason: string }
@@ -11,6 +19,7 @@ interface AuthContextValue {
   isLoading: boolean
   userEmail: string | null
   login: (email: string, password: string) => Promise<LoginResult>
+  loginWithGoogle: () => Promise<LoginResult>
   logout: () => void
 }
 
@@ -44,6 +53,9 @@ function friendlyAuthError(error: unknown): string {
       return 'Este domínio não está autorizado no Firebase Authentication.'
     case 'auth/network-request-failed':
       return 'Falha de conexão. Verifique sua internet e tente novamente.'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Login cancelado.'
     default:
       return 'Não foi possível entrar. Tente novamente.'
   }
@@ -59,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       return
     }
+
+    getRedirectResult(authInstance).catch(() => {})
 
     const unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
       void (async () => {
@@ -78,7 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isFirebaseConfigured || !auth) {
       return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
     }
-    console.log('[auth] authDomain em uso:', auth.app.options.authDomain)
     try {
       const result = await signInWithEmailAndPassword(auth, email.trim(), password)
       if (!(await verifyAdminAccess(result.user.email))) {
@@ -87,12 +100,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return { ok: true }
     } catch (error) {
-      console.error('[auth] ERRO BRUTO:', error)
-      console.error('[auth] name/message/code:', {
-        name: (error as Error)?.name,
-        message: (error as Error)?.message,
-        code: (error as { code?: string })?.code,
-      })
+      return { ok: false, reason: friendlyAuthError(error) }
+    }
+  }
+
+  async function loginWithGoogle(): Promise<LoginResult> {
+    if (!isFirebaseConfigured || !auth) {
+      return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
+    }
+    try {
+      let result
+      try {
+        result = await signInWithPopup(auth, googleProvider)
+      } catch (popupError) {
+        const code = (popupError as { code?: string })?.code
+        if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
+          await signInWithRedirect(auth, googleProvider)
+          return { ok: true }
+        }
+        throw popupError
+      }
+      if (!(await verifyAdminAccess(result.user.email))) {
+        await signOut(auth)
+        return { ok: false, reason: 'Esse e-mail não tem permissão de admin.' }
+      }
+      return { ok: true }
+    } catch (error) {
       return { ok: false, reason: friendlyAuthError(error) }
     }
   }
@@ -107,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     userEmail: user?.email ?? null,
     login,
+    loginWithGoogle,
     logout,
   }
 
