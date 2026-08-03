@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ShieldUserBold, UserPlusBold, TrashBinTrashLinear } from 'solar-icon-set'
+import { ShieldUserBold, UserPlusBold, TrashBinTrashLinear, BroomBold } from 'solar-icon-set'
 import { addAdmin, listAdmins, removeAdmin } from '@/lib/adminAccess'
 import { useShop } from '@/store/ShopContext'
+
+const LEGACY_STORAGE_KEYS = ['lorena:products', 'lorena:banners', 'lorena:coupons']
 
 export function AdminAccessManager() {
   const { showToast } = useShop()
@@ -61,6 +63,17 @@ export function AdminAccessManager() {
     } catch {
       showToast('Não foi possível remover esse e-mail.', 'error')
     }
+  }
+
+  function handleClearLegacyStorage() {
+    if (
+      !window.confirm(
+        'Isso limpa dados antigos salvos neste navegador (de antes da migração para o Firestore) e recarrega a página. Continuar?',
+      )
+    )
+      return
+    LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key))
+    window.location.reload()
   }
 
   return (
@@ -130,6 +143,30 @@ export function AdminAccessManager() {
           )}
         </ul>
       )}
+
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-wine-600/30 bg-noir-900 p-4">
+        <div className="flex items-start gap-3">
+          <BroomBold size={22} className="mt-0.5 shrink-0 text-wine-600" />
+          <div>
+            <p className="text-sm font-medium text-cream-100">Manutenção</p>
+            <p className="text-sm text-cream-300">
+              Se produtos, banners ou cupons antigos (de antes da migração para o Firestore) ainda
+              aparecem neste navegador, limpe o cache local abaixo. Isso não apaga nada do
+              Firestore — para corrigir os dados que todo mundo vê, use o botão "Restaurar" nas
+              abas Produtos/Banners/Cupons, ou edite direto pelo painel.
+            </p>
+          </div>
+        </div>
+        <motion.button
+          type="button"
+          onClick={handleClearLegacyStorage}
+          whileTap={{ scale: 0.97 }}
+          className="flex items-center justify-center gap-2 self-start rounded-full border border-wine-600 px-4 py-2 text-sm font-medium text-wine-600 transition hover:bg-wine-600 hover:text-cream-100"
+        >
+          <BroomBold size={16} />
+          Limpar dados antigos deste navegador
+        </motion.button>
+      </div>
     </div>
   )
 }
