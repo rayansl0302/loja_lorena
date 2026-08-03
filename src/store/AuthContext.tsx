@@ -1,14 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import {
-  getRedirectResult,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  signOut,
-  type User,
-} from 'firebase/auth'
-import { auth, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
+import { auth, isFirebaseConfigured } from '@/lib/firebase'
 import { isRegisteredAdmin } from '@/lib/adminAccess'
 
 type LoginResult = { ok: true } | { ok: false; reason: string }
@@ -18,10 +10,7 @@ interface AuthContextValue {
   isOwner: boolean
   isLoading: boolean
   userEmail: string | null
-  redirectError: string | null
-  clearRedirectError: () => void
   login: (email: string, password: string) => Promise<LoginResult>
-  loginWithGoogle: () => Promise<void>
   logout: () => void
 }
 
@@ -50,9 +39,6 @@ function friendlyAuthError(error: unknown): string {
       return 'E-mail ou senha incorretos.'
     case 'auth/too-many-requests':
       return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
-    case 'auth/popup-closed-by-user':
-    case 'auth/cancelled-popup-request':
-      return 'Login cancelado.'
     case 'auth/unauthorized-domain':
       return 'Este domínio não está autorizado no Firebase Authentication.'
     case 'auth/network-request-failed':
@@ -65,9 +51,6 @@ function friendlyAuthError(error: unknown): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [redirectError, setRedirectError] = useState<string | null>(null)
-
-  const clearRedirectError = useCallback(() => setRedirectError(null), [])
 
   useEffect(() => {
     const authInstance = auth
@@ -75,19 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       return
     }
-
-    // Conclui o login por redirecionamento (signInWithRedirect), se a gente
-    // acabou de voltar do accounts.google.com.
-    getRedirectResult(authInstance)
-      .then(async (result) => {
-        if (result && !(await verifyAdminAccess(result.user.email))) {
-          await signOut(authInstance)
-          setRedirectError('Essa conta Google não tem permissão de admin.')
-        }
-      })
-      .catch((error) => {
-        setRedirectError(friendlyAuthError(error))
-      })
 
     const unsubscribe = onAuthStateChanged(authInstance, (nextUser) => {
       void (async () => {
@@ -119,38 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function loginWithGoogle(): Promise<void> {
-    if (!isFirebaseConfigured || !auth) {
-      setRedirectError('Firebase não está configurado neste ambiente.')
-      return
-    }
-
-    try {
-      // Popup funciona melhor no localhost (redirect costuma falhar com
-      // auth/network-request-failed por bloqueio de cookies de terceiros).
-      const result = await signInWithPopup(auth, googleProvider)
-      if (!(await verifyAdminAccess(result.user.email))) {
-        await signOut(auth)
-        setRedirectError('Essa conta Google não tem permissão de admin.')
-      }
-    } catch (error) {
-      const code =
-        typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
-
-      if (code === 'auth/popup-blocked') {
-        try {
-          await signInWithRedirect(auth, googleProvider)
-          return
-        } catch (redirectError) {
-          setRedirectError(friendlyAuthError(redirectError))
-          return
-        }
-      }
-
-      setRedirectError(friendlyAuthError(error))
-    }
-  }
-
   function logout() {
     if (auth) void signOut(auth)
   }
@@ -160,10 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isOwner: isOwnerEmail(user?.email),
     isLoading,
     userEmail: user?.email ?? null,
-    redirectError,
-    clearRedirectError,
     login,
-    loginWithGoogle,
     logout,
   }
 
