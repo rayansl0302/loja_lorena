@@ -75,17 +75,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function login(email: string, password: string): Promise<LoginResult> {
+    console.log('[auth] login() chamado', {
+      isFirebaseConfigured,
+      hasAuthInstance: Boolean(auth),
+      authApp: auth?.app?.options,
+      onLine: navigator.onLine,
+    })
+
     if (!isFirebaseConfigured || !auth) {
       return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
     }
     try {
+      console.log('[auth] chamando signInWithEmailAndPassword...')
       const result = await signInWithEmailAndPassword(auth, email.trim(), password)
+      console.log('[auth] signInWithEmailAndPassword OK', result.user.email)
       if (!(await verifyAdminAccess(result.user.email))) {
         await signOut(auth)
         return { ok: false, reason: 'Esse e-mail não tem permissão de admin.' }
       }
       return { ok: true }
     } catch (error) {
+      console.error('[auth] ERRO BRUTO no login:', error)
+      console.error('[auth] detalhes:', {
+        name: (error as Error)?.name,
+        message: (error as Error)?.message,
+        code: (error as { code?: string })?.code,
+        stack: (error as Error)?.stack,
+      })
       return { ok: false, reason: friendlyAuthError(error) }
     }
   }
