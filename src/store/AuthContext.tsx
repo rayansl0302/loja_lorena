@@ -6,9 +6,10 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
+  type AuthProvider as FirebaseAuthProvider,
   type User,
 } from 'firebase/auth'
-import { auth, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
+import { auth, appleProvider, googleProvider, isFirebaseConfigured } from '@/lib/firebase'
 import { isRegisteredAdmin } from '@/lib/adminAccess'
 
 type LoginResult = { ok: true } | { ok: false; reason: string }
@@ -20,6 +21,7 @@ interface AuthContextValue {
   userEmail: string | null
   login: (email: string, password: string) => Promise<LoginResult>
   loginWithGoogle: () => Promise<LoginResult>
+  loginWithApple: () => Promise<LoginResult>
   logout: () => void
 }
 
@@ -104,18 +106,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function loginWithGoogle(): Promise<LoginResult> {
+  async function loginWithOAuth(provider: FirebaseAuthProvider): Promise<LoginResult> {
     if (!isFirebaseConfigured || !auth) {
       return { ok: false, reason: 'Firebase não está configurado neste ambiente.' }
     }
     try {
       let result
       try {
-        result = await signInWithPopup(auth, googleProvider)
+        result = await signInWithPopup(auth, provider)
       } catch (popupError) {
         const code = (popupError as { code?: string })?.code
         if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
-          await signInWithRedirect(auth, googleProvider)
+          await signInWithRedirect(auth, provider)
           return { ok: true }
         }
         throw popupError
@@ -130,6 +132,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function loginWithGoogle(): Promise<LoginResult> {
+    return loginWithOAuth(googleProvider)
+  }
+
+  function loginWithApple(): Promise<LoginResult> {
+    return loginWithOAuth(appleProvider)
+  }
+
   function logout() {
     if (auth) void signOut(auth)
   }
@@ -141,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userEmail: user?.email ?? null,
     login,
     loginWithGoogle,
+    loginWithApple,
     logout,
   }
 
