@@ -6,7 +6,8 @@ import type { Coupon } from '@/types/coupon'
 import { categories } from '@/config/brand'
 import { BANNER_ICON_OPTIONS, getBannerIcon } from '@/config/bannerIcons'
 import { isCouponExpired } from '@/utils/coupon'
-import { isSafeHttpUrl, toSafeImageSrc } from '@/utils/url'
+import { isSafeHttpUrl } from '@/utils/url'
+import { ImageUploadField } from '@/components/ImageUploadField'
 
 type FormState = {
   title: string
@@ -213,29 +214,15 @@ export function BannerForm({ editingBanner, allCoupons, onSubmit, onCancel }: Ba
         </label>
       </div>
 
-      <label className="flex flex-col gap-1.5 text-sm text-cream-100">
-        URL da imagem (opcional)
-        <div className="flex items-center gap-3">
-          <div className="flex h-16 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-noir-700 bg-noir-800">
-            {toSafeImageSrc(form.image) ? (
-              <img src={toSafeImageSrc(form.image)} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-[10px] text-cream-300/50">sem foto</span>
-            )}
-          </div>
-          <input
-            type="url"
-            value={form.image}
-            onChange={(e) => setForm((prev) => ({ ...prev, image: e.target.value }))}
-            placeholder="https://cdn.seusite.com/banners/hero.jpg"
-            className="w-full min-w-0 rounded-xl border border-noir-700 bg-noir-800 px-3.5 py-2.5 text-cream-100 outline-none transition placeholder:text-cream-300/50 focus:border-gold-500"
-          />
-        </div>
-        <span className="text-xs text-cream-300/60">
-          Dimensão recomendada: 1920×800px (proporção ~21:9), JPG/PNG/WebP até 2MB. Cole a URL
-          pública do Cloudflare CDN/R2. Deixe em branco para usar o ícone ilustrado.
-        </span>
-      </label>
+      <ImageUploadField
+        label="Imagem (opcional)"
+        value={form.image}
+        onChange={(value) => setForm((prev) => ({ ...prev, image: value }))}
+        folder="loja-lorena/banners"
+        placeholder="https://cdn.seusite.com/banners/hero.jpg"
+        hint="Dimensão recomendada: 1920×800px (proporção ~21:9), JPG/PNG/WebP até 5MB. Envie do computador ou cole uma URL pública. Deixe em branco para usar o ícone ilustrado."
+        previewClassName="h-16 w-28"
+      />
 
       <label className="flex flex-col gap-1.5 text-sm text-cream-100">
         Cupom exibido no banner (opcional)

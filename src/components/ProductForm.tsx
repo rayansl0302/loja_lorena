@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import type { Category, Product, Size } from '@/types/product'
 import { categories, sizes, MAX_HIGHLIGHTS } from '@/config/brand'
-import { isSafeHttpUrl, toSafeImageSrc } from '@/utils/url'
+import { isSafeHttpUrl } from '@/utils/url'
 import { PRODUCT_ICON_OPTIONS, getProductIcon } from '@/config/productIcons'
+import { ImageUploadField } from '@/components/ImageUploadField'
 
 type FormState = {
   name: string
@@ -192,29 +193,15 @@ export function ProductForm({ editingProduct, allProducts, onSubmit, onCancel }:
         </label>
       </div>
 
-      <label className="flex flex-col gap-1.5 text-sm text-cream-100">
-        URL da imagem (opcional)
-        <div className="flex items-center gap-3">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-noir-700 bg-noir-800">
-            {toSafeImageSrc(form.image) ? (
-              <img src={toSafeImageSrc(form.image)} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-[10px] text-cream-300/50">sem foto</span>
-            )}
-          </div>
-          <input
-            type="url"
-            value={form.image}
-            onChange={(e) => setForm((prev) => ({ ...prev, image: e.target.value }))}
-            placeholder="https://cdn.seusite.com/produtos/peca.jpg"
-            className="w-full min-w-0 rounded-xl border border-noir-700 bg-noir-800 px-3.5 py-2.5 text-cream-100 outline-none transition placeholder:text-cream-300/50 focus:border-gold-500"
-          />
-        </div>
-        <span className="text-xs text-cream-300/60">
-          Dimensão recomendada: 800×1000px (proporção 4:5), JPG/PNG/WebP até 2MB. Cole a URL
-          pública do Cloudflare CDN/R2. Deixe em branco para usar o ícone colorido.
-        </span>
-      </label>
+      <ImageUploadField
+        label="Imagem (opcional)"
+        value={form.image}
+        onChange={(value) => setForm((prev) => ({ ...prev, image: value }))}
+        folder="loja-lorena/products"
+        placeholder="https://cdn.seusite.com/produtos/peca.jpg"
+        hint="Dimensão recomendada: 800×1000px (proporção 4:5), JPG/PNG/WebP até 5MB. Envie do computador ou cole uma URL pública. Deixe em branco para usar o ícone colorido."
+        previewClassName="h-16 w-16"
+      />
 
       <div className="flex flex-col gap-1.5 text-sm text-cream-100">
         Tamanhos disponíveis
