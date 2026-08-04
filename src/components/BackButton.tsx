@@ -9,19 +9,12 @@ interface BackButtonProps {
 export function BackButton({ fallbackTo = '/', label = 'Voltar' }: BackButtonProps) {
   const navigate = useNavigate()
 
+  // Sempre navega direto pro destino em vez de navigate(-1) ("página
+  // anterior no histórico"). Todo uso deste botão aponta pra "voltar à
+  // loja" — com navigate(-1), se o usuário passou por várias páginas
+  // internas antes de chegar aqui, cada clique desfazia só um passo,
+  // exigindo vários cliques pra realmente sair da página atual.
   function handleBack() {
-    // O React Router guarda um índice interno em window.history.state.idx:
-    // ele avança a cada navegação por "push" (link/navigate normal), mas
-    // fica parado em navegações por "replace" (ex.: o ProtectedRoute
-    // mandando pra /login sem estar autenticado). Se idx > 0, existe uma
-    // entrada anterior de dentro do site pra voltar com segurança; se for
-    // 0, não existe (acesso direto pela URL, redirect por replace etc.) e
-    // "voltar" precisa ir pro fallback em vez de navigate(-1).
-    const idx = (window.history.state as { idx?: number } | null)?.idx
-    if (typeof idx === 'number' && idx > 0) {
-      navigate(-1)
-      return
-    }
     navigate(fallbackTo)
   }
 
