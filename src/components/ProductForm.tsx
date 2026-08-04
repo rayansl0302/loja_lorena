@@ -199,7 +199,7 @@ export function ProductForm({ editingProduct, allProducts, onSubmit, onCancel }:
         onChange={(value) => setForm((prev) => ({ ...prev, image: value }))}
         folder="loja-lorena/products"
         placeholder="https://cdn.seusite.com/produtos/peca.jpg"
-        hint="Dimensão recomendada: 800×1000px (proporção 4:5), JPG/PNG/WebP até 5MB. Envie do computador ou cole uma URL pública. Deixe em branco para usar o ícone colorido."
+        hint="Dimensão recomendada: 800×1000px (proporção 4:5), JPG/PNG/WebP até 5MB. Envie do celular ou computador, ou cole uma URL pública. Deixe em branco para usar o ícone colorido."
         previewClassName="h-16 w-16"
       />
 

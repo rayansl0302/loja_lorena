@@ -220,7 +220,7 @@ export function BannerForm({ editingBanner, allCoupons, onSubmit, onCancel }: Ba
         onChange={(value) => setForm((prev) => ({ ...prev, image: value }))}
         folder="loja-lorena/banners"
         placeholder="https://cdn.seusite.com/banners/hero.jpg"
-        hint="Dimensão recomendada: 1920×800px (proporção ~21:9), JPG/PNG/WebP até 5MB. Envie do computador ou cole uma URL pública. Deixe em branco para usar o ícone ilustrado."
+        hint="Dimensão recomendada: 1920×800px (proporção ~21:9), JPG/PNG/WebP até 5MB. Envie do celular ou computador, ou cole uma URL pública. Deixe em branco para usar o ícone ilustrado."
         previewClassName="h-16 w-28"
       />
 

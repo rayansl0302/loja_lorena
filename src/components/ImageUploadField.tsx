@@ -86,7 +86,7 @@ export function ImageUploadField({
                 className="flex w-fit items-center gap-2 rounded-full border border-noir-600 px-3.5 py-1.5 text-xs font-medium text-cream-300 transition hover:border-gold-500 hover:text-gold-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CloudUploadBold size={14} />
-                {isUploading ? 'Enviando...' : 'Enviar do computador'}
+                {isUploading ? 'Enviando...' : 'Enviar imagem'}
               </button>
             </>
           )}
