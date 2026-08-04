@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { brand } from '@/config/brand'
+import { brand, whatsappLink } from '@/config/brand'
 import { Logo } from '@/components/Logo'
 import { PaymentBadges } from '@/components/PaymentBadges'
 
@@ -65,6 +65,18 @@ export function Footer() {
             Área da lojista
           </Link>
         </div>
+
+        <p className="text-center text-[11px] text-cream-300/40 sm:text-left">
+          Desenvolvido por{' '}
+          <a
+            href={whatsappLink('Olá, Rayan! Vi o site da Impéria e gostaria de falar sobre um projeto.', '5571996566277')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition hover:text-gold-400 hover:underline"
+          >
+            Rayan Silva Lima
+          </a>
+        </p>
       </div>
     </footer>
   )
