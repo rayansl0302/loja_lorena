@@ -1,7 +1,14 @@
 import { brand } from '@/config/brand'
 
-/** Domínio público do site — atualize antes do deploy. */
-export const SITE_URL = 'https://imperia.com.br'
+/**
+ * Domínio público do site. Precisa bater com o domínio real onde o site está
+ * no ar — um site que se declara em og:url/canonical como um domínio
+ * diferente do que está servindo é um padrão clássico usado por kits de
+ * phishing, e dispara falso positivo em ferramentas como o Malwarebytes
+ * Browser Guard. Troque para o domínio próprio (ex.: https://imperia.com.br)
+ * assim que ele estiver configurado na Vercel — e não antes disso.
+ */
+export const SITE_URL = 'https://loja-lorena.vercel.app'
 
 export const defaultSeo = {
   title: `${brand.name} — Moda feminina com atendimento no WhatsApp`,
