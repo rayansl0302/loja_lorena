@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { AltArrowLeftLinear } from 'solar-icon-set'
 
 interface BackButtonProps {
@@ -8,13 +8,17 @@ interface BackButtonProps {
 
 export function BackButton({ fallbackTo = '/', label = 'Voltar' }: BackButtonProps) {
   const navigate = useNavigate()
-  const location = useLocation()
 
   function handleBack() {
-    // location.key só é 'default' quando ainda não houve navegação interna
-    // nesta aba (ex.: acesso direto pela URL, recarregar a página). Nesse
-    // caso não existe uma entrada de histórico "dentro do site" pra voltar.
-    if (location.key !== 'default') {
+    // O React Router guarda um índice interno em window.history.state.idx:
+    // ele avança a cada navegação por "push" (link/navigate normal), mas
+    // fica parado em navegações por "replace" (ex.: o ProtectedRoute
+    // mandando pra /login sem estar autenticado). Se idx > 0, existe uma
+    // entrada anterior de dentro do site pra voltar com segurança; se for
+    // 0, não existe (acesso direto pela URL, redirect por replace etc.) e
+    // "voltar" precisa ir pro fallback em vez de navigate(-1).
+    const idx = (window.history.state as { idx?: number } | null)?.idx
+    if (typeof idx === 'number' && idx > 0) {
       navigate(-1)
       return
     }
